@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Rutero de tramo — prototipo</title>
+<title>DePaseo</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root {
@@ -54,7 +54,7 @@
 <div id="app">
   <div id="map"></div>
   <div id="panel">
-    <h1>Rutero de tramo · prototipo</h1>
+    <h1>DePaseo</h1>
 
     <div class="step">
       <div class="step-label"><span><span class="n">1.</span>Importar ruta (GPX)</span></div>
@@ -62,9 +62,12 @@
     </div>
 
     <div class="step">
-      <div class="step-label"><span><span class="n">2.</span>Elegir tramo A → B</span></div>
+      <div class="step-label">
+        <span><span class="n">2.</span>Tramo A → B</span>
+        <span class="radius-value" id="abKmLabel">—</span>
+      </div>
       <div id="abInstructions" class="pill">Carga una ruta primero</div>
-      <button class="secondary" id="resetAB" style="display:none;">Reiniciar selección</button>
+      <button class="secondary" id="resetAB" style="display:none;">Usar ruta completa</button>
     </div>
 
     <div class="step">
@@ -82,6 +85,17 @@
 
     <button id="searchBtn" disabled>Buscar refugios</button>
     <div id="status"></div>
+
+    <div class="step" id="exportStep" style="display:none; margin-top:14px; border-top:1px solid var(--panel-border); padding-top:12px;">
+      <div class="step-label"><span><span class="n">5.</span>Exportar</span></div>
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--ink-dim); margin-bottom:6px;">
+        <input type="radio" name="exportMode" value="both" checked> Ruta + waypoints
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--ink-dim); margin-bottom:8px;">
+        <input type="radio" name="exportMode" value="waypoints"> Solo waypoints
+      </label>
+      <button class="secondary" id="exportBtn">Exportar GPX</button>
+    </div>
   </div>
 </div>
 
@@ -97,10 +111,13 @@
 
   let trackPoints = [];      // [{lat, lon, dist}], dist = distancia acumulada en km
   let routeLine = null;      // capa Leaflet de la ruta completa
+  let highlightLine = null;  // resalta el tramo A-B seleccionado
   let markerA = null, markerB = null;
   let idxA = null, idxB = null;
   let bufferLayer = null;
   let resultsLayer = L.layerGroup().addTo(map);
+  let lastResults = [];      // últimos POIs encontrados, para exportar
+  let lastSub = [];          // puntos del tramo A-B usado en la última búsqueda
 
   const el = (id) => document.getElementById(id);
   const statusEl = el('status');
@@ -108,7 +125,10 @@
   const radiusSlider = el('radiusSlider');
   const radiusLabel = el('radiusLabel');
   const abInstructions = el('abInstructions');
+  const abKmLabel = el('abKmLabel');
   const resetABBtn = el('resetAB');
+  const exportStep = el('exportStep');
+  const exportBtn = el('exportBtn');
 
   radiusSlider.addEventListener('input', () => {
     radiusLabel.textContent = radiusSlider.value + ' m';
@@ -185,21 +205,37 @@
 
   function loadRoute(points) {
     trackPoints = points;
-    idxA = null; idxB = null;
     if (markerA) { map.removeLayer(markerA); markerA = null; }
     if (markerB) { map.removeLayer(markerB); markerB = null; }
     if (routeLine) map.removeLayer(routeLine);
+    if (highlightLine) { map.removeLayer(highlightLine); highlightLine = null; }
     if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
     resultsLayer.clearLayers();
+    exportStep.style.display = 'none';
+    lastResults = []; lastSub = [];
 
     const latlngs = points.map(p => [p.lat, p.lon]);
     routeLine = L.polyline(latlngs, { color: '#5fb488', weight: 4, opacity: 0.85 }).addTo(map);
     map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
 
-    routeLine.on('click', onRouteClick);
-    abInstructions.textContent = 'Toca la ruta para elegir el punto A';
-    resetABBtn.style.display = 'none';
-    searchBtn.disabled = true;
+    // Tiradores arrastrables: A al inicio, B al final de la ruta por defecto.
+    idxA = 0;
+    idxB = points.length - 1;
+    markerA = L.marker([points[idxA].lat, points[idxA].lon], { draggable: true })
+      .bindTooltip('A', { permanent: true, direction: 'top' }).addTo(map);
+    markerB = L.marker([points[idxB].lat, points[idxB].lon], { draggable: true })
+      .bindTooltip('B', { permanent: true, direction: 'top' }).addTo(map);
+
+    markerA.on('drag', (e) => onHandleDrag('A', e));
+    markerB.on('drag', (e) => onHandleDrag('B', e));
+    markerA.on('dragend', () => updateSelection(true));
+    markerB.on('dragend', () => updateSelection(true));
+
+    abInstructions.textContent = 'Arrastra los tiradores A y B sobre la ruta';
+    resetABBtn.style.display = 'block';
+    searchBtn.disabled = false;
+
+    updateSelection(false);
 
     const meta = points._meta;
     let msg = 'Ruta cargada: ' + points.length + ' puntos, ' + points[points.length-1].dist.toFixed(1) + ' km.';
@@ -218,37 +254,37 @@
     return best;
   }
 
-  function onRouteClick(e) {
-    const idx = nearestIndex(e.latlng);
+  // Mientras se arrastra, el tirador se "engancha" al punto de la ruta más
+  // cercano — así siempre queda sobre la traza, nunca suelto en el mapa.
+  function onHandleDrag(which, e) {
+    const idx = nearestIndex(e.target.getLatLng());
     const p = trackPoints[idx];
-    if (idxA === null) {
-      idxA = idx;
-      markerA = L.marker([p.lat, p.lon], { title: 'A' })
-        .bindTooltip('A', { permanent: true, direction: 'top' }).addTo(map);
-      abInstructions.textContent = 'Punto A fijado. Ahora toca la ruta para elegir el punto B';
-      resetABBtn.style.display = 'block';
-    } else if (idxB === null) {
-      idxB = idx;
-      markerB = L.marker([p.lat, p.lon], { title: 'B' })
-        .bindTooltip('B', { permanent: true, direction: 'top' }).addTo(map);
-      const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
-      const km = (trackPoints[hi].dist - trackPoints[lo].dist).toFixed(1);
-      abInstructions.textContent = 'Tramo seleccionado: ' + km + ' km';
-      searchBtn.disabled = false;
+    e.target.setLatLng([p.lat, p.lon]);
+    if (which === 'A') idxA = idx; else idxB = idx;
+    updateSelection(false);
+  }
+
+  function updateSelection(recomputeResultsHint) {
+    const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
+    const km = (trackPoints[hi].dist - trackPoints[lo].dist).toFixed(1);
+    abKmLabel.textContent = km + ' km';
+
+    if (highlightLine) map.removeLayer(highlightLine);
+    const sub = trackPoints.slice(lo, hi + 1).map(p => [p.lat, p.lon]);
+    highlightLine = L.polyline(sub, { color: '#d98a4f', weight: 5, opacity: 0.95 }).addTo(map);
+
+    searchBtn.disabled = (lo === hi);
+    if (recomputeResultsHint && lastResults.length) {
+      setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.');
     }
-    // si ya hay A y B, un tercer clic no hace nada hasta reiniciar
   }
 
   resetABBtn.addEventListener('click', () => {
-    idxA = null; idxB = null;
-    if (markerA) { map.removeLayer(markerA); markerA = null; }
-    if (markerB) { map.removeLayer(markerB); markerB = null; }
-    if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
-    resultsLayer.clearLayers();
-    abInstructions.textContent = 'Toca la ruta para elegir el punto A';
-    resetABBtn.style.display = 'none';
-    searchBtn.disabled = true;
-    setStatus('');
+    idxA = 0;
+    idxB = trackPoints.length - 1;
+    markerA.setLatLng([trackPoints[idxA].lat, trackPoints[idxA].lon]);
+    markerB.setLatLng([trackPoints[idxB].lat, trackPoints[idxB].lon]);
+    updateSelection(true);
   });
 
   el('gpxFile').addEventListener('change', (ev) => {
@@ -288,6 +324,7 @@
       return;
     }
 
+    lastSub = sub;
     const line = turf.lineString(sub.map(p => [p.lon, p.lat]));
     const radiusM = parseInt(radiusSlider.value, 10);
     let buffered = turf.buffer(line, radiusM / 1000, { units: 'kilometers', steps: 6 });
@@ -346,7 +383,7 @@
   }
 
   function renderResults(elements) {
-    let count = 0;
+    lastResults = [];
     elements.forEach(el2 => {
       const lat = el2.lat !== undefined ? el2.lat : (el2.center ? el2.center.lat : null);
       const lon = el2.lon !== undefined ? el2.lon : (el2.center ? el2.center.lon : null);
@@ -358,10 +395,55 @@
         radius: 7, color: '#d98a4f', weight: 2, fillColor: '#d98a4f', fillOpacity: 0.7
       }).bindPopup('<b>' + name + '</b><br>' + tipo);
       resultsLayer.addLayer(marker);
-      count++;
+      lastResults.push({ lat, lon, name, tipo });
     });
-    setStatus(count + ' refugio(s) encontrado(s) en el corredor.');
+    setStatus(lastResults.length + ' refugio(s) encontrado(s) en el corredor.');
+    exportStep.style.display = lastResults.length ? 'block' : 'none';
   }
+
+  // --- Exportar a GPX: ruta (tramo A-B) + waypoints, o solo waypoints ---
+  function escapeXml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function buildGPX(mode) {
+    const parts = [];
+    parts.push('<?xml version="1.0" encoding="UTF-8"?>');
+    parts.push('<gpx version="1.1" creator="DePaseo" xmlns="http://www.topografix.com/GPX/1/1">');
+
+    lastResults.forEach(r => {
+      parts.push('  <wpt lat="' + r.lat.toFixed(6) + '" lon="' + r.lon.toFixed(6) + '">');
+      parts.push('    <name>' + escapeXml(r.name) + '</name>');
+      parts.push('    <type>' + escapeXml(r.tipo) + '</type>');
+      parts.push('  </wpt>');
+    });
+
+    if (mode === 'both' && lastSub.length > 1) {
+      parts.push('  <trk><name>DePaseo - tramo</name><trkseg>');
+      lastSub.forEach(p => {
+        parts.push('    <trkpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lon.toFixed(6) + '"></trkpt>');
+      });
+      parts.push('  </trkseg></trk>');
+    }
+
+    parts.push('</gpx>');
+    return parts.join('\n');
+  }
+
+  exportBtn.addEventListener('click', () => {
+    if (!lastResults.length) return;
+    const mode = document.querySelector('input[name="exportMode"]:checked').value;
+    const gpxText = buildGPX(mode);
+    const blob = new Blob([gpxText], { type: 'application/gpx+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'depaseo-shelters' + (mode === 'waypoints' ? '-waypoints' : '') + '.gpx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
 
   searchBtn.addEventListener('click', searchShelters);
 })();
