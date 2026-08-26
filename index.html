@@ -19,37 +19,49 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  #app { display: flex; flex-direction: column; height: 100%; }
-  #map { flex: 1 1 auto; min-height: 0; }
-  #panel {
-    flex: 0 0 auto;
-    background: var(--panel);
-    border-top: 1px solid var(--panel-border);
-    padding: 12px 14px 16px;
-    max-height: 48vh;
-    overflow-y: auto;
+  #app { position: relative; height: 100%; overflow: hidden; }
+  #map { position: absolute; inset: 0; }
+
+  /* --- Botones flotantes circulares (GPS, ajustes, exportar) --- */
+  .fab {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--panel); border: 1px solid var(--panel-border); color: var(--ink);
+    font-size: 20px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.35); z-index: 1000; padding: 0;
   }
-  h1 { font-size: 15px; margin: 0 0 10px; font-weight: 600; letter-spacing: 0.2px; }
-  .step { margin-bottom: 12px; }
+  .fab.active { background: var(--accent-dim); border-color: var(--accent); }
+  #gpsBtn { position: fixed; top: 16px; left: 16px; }
+  #settingsBtn { position: fixed; top: 16px; right: 16px; }
+
+  /* --- Tarjeta flotante de ajustes --- */
+  .floating-card {
+    position: fixed; top: 76px; right: 16px; left: 16px; margin-left: auto;
+    max-width: 380px; background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 12px; padding: 14px; z-index: 1000; max-height: 74vh; overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
+  .floating-card[hidden] { display: none; }
+  .card-header { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
   .step-label { font-size: 12px; color: var(--ink-dim); margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
-  .step-label .n { color: var(--accent); font-weight: 600; margin-right: 4px; }
-  input[type="file"] {
-    width: 100%; font-size: 13px; color: var(--ink-dim);
+  .radius-value { color: var(--accent); font-weight: 700; }
+  .pill { display: inline-block; background: var(--panel-border); color: var(--ink-dim); font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-top: 4px; }
+  input[type="file"] { width: 100%; font-size: 13px; color: var(--ink-dim); }
+  input[type="text"] {
+    background: var(--bg); border: 1px solid var(--panel-border); color: var(--ink);
+    border-radius: 8px; padding: 8px 10px; font-size: 13px; width: 100%;
   }
   button {
     background: var(--accent-dim); color: var(--ink); border: none; border-radius: var(--radius);
-    padding: 10px 14px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%;
+    padding: 10px 14px; font-size: 14px; font-weight: 600; cursor: pointer;
   }
+  button.wide { width: 100%; }
   button:disabled { background: #33403a; color: var(--ink-dim); cursor: not-allowed; }
-  button.secondary { background: transparent; border: 1px solid var(--panel-border); color: var(--ink-dim); font-weight: 500; margin-top: 6px; }
-  input[type="range"] { width: 100%; accent-color: var(--accent); }
-  .radius-value { color: var(--accent); font-weight: 700; }
-  #status { font-size: 13px; color: var(--ink-dim); margin-top: 10px; line-height: 1.4; min-height: 18px; }
-  #status.err { color: var(--warn); }
-  .pill { display: inline-block; background: var(--panel-border); color: var(--ink-dim); font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-top: 4px; }
-  .leaflet-popup-content { font-size: 13px; }
+  button.secondary { background: transparent; border: 1px solid var(--panel-border); color: var(--ink-dim); font-weight: 500; }
+  button.btn-sm { padding: 6px 10px; font-size: 12px; }
+  .card-status { font-size: 12px; color: var(--ink-dim); margin-top: 10px; line-height: 1.4; min-height: 16px; }
+  .card-status.err { color: var(--warn); }
 
-  /* Slider de rango con dos tiradores (A y B superpuestos sobre el mismo eje) */
+  /* --- Slider de rango con dos tiradores --- */
   .range-slider { position: relative; height: 26px; margin-top: 10px; }
   .range-slider .track {
     position: absolute; top: 50%; left: 0; right: 0; height: 4px;
@@ -73,115 +85,177 @@
     pointer-events: auto; width: 18px; height: 18px; border-radius: 50%;
     background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
   }
+  input[type="range"]#radiusSlider { width: 100%; accent-color: var(--accent); }
+  .minmax-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+
+  /* --- Rutas guardadas --- */
+  #savedRoutesSection { margin-top: 14px; border-top: 1px solid var(--panel-border); padding-top: 10px; }
+  .saved-route-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; }
+  .saved-route-info { font-size: 13px; line-height: 1.3; }
+  .saved-route-info .dim { color: var(--ink-dim); font-size: 11px; }
+  .saved-route-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+  /* --- Etiqueta flotante con los datos del tramo --- */
+  #infoPill {
+    position: fixed; bottom: 16px; left: 16px; z-index: 900;
+    background: rgba(35,48,43,0.92); color: var(--ink); padding: 8px 12px;
+    border-radius: 10px; font-size: 12px; line-height: 1.4; max-width: 62vw;
+  }
+  #infoPill[hidden] { display: none; }
+
+  /* --- FAB de exportar, expandible --- */
+  #exportFab { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+  #exportFab[hidden] { display: none; }
+  #exportFab .export-option {
+    position: absolute; right: 0; white-space: nowrap;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--panel-border);
+    border-radius: 999px; padding: 8px 14px; font-size: 13px;
+    opacity: 0; transform: translateY(10px); pointer-events: none;
+    transition: opacity .15s ease, transform .15s ease;
+  }
+  #exportFab .export-option.opt1 { bottom: 60px; }
+  #exportFab .export-option.opt2 { bottom: 112px; }
+  #exportFab.open .export-option { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #exportToggle { position: relative; z-index: 2; }
+
+  /* --- Toast para avisos que deben verse aunque la tarjeta esté cerrada --- */
+  #toast {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--warn); color: #1c2521; padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; z-index: 1200; max-width: 80vw; text-align: center;
+  }
+  #toast[hidden] { display: none; }
+
+  .leaflet-popup-content { font-size: 13px; }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="map"></div>
-  <div id="panel">
-    <h1>EnRuta</h1>
 
-    <div class="step">
-      <div class="step-label"><span><span class="n">1.</span>Importar ruta (GPX)</span></div>
+  <button id="gpsBtn" class="fab" title="Seguir mi posición">◎</button>
+  <button id="settingsBtn" class="fab" title="Ajustes">⚙</button>
+
+  <div id="settingsCard" class="floating-card" hidden>
+    <div class="card-header">EnRuta</div>
+
+    <div id="uploadSection">
+      <div class="step-label"><span>Importar ruta (GPX)</span></div>
       <input type="file" id="gpxFile" accept=".gpx" />
     </div>
 
-    <div class="step">
-      <div class="step-label">
-        <span><span class="n">2.</span>Tramo A → B</span>
-        <span class="radius-value" id="abKmLabel">—</span>
-      </div>
-      <div id="abInstructions" class="pill">Carga una ruta primero</div>
-
+    <div id="routeSection" hidden>
+      <div class="step-label"><span>Tramo A → B</span><span class="radius-value" id="abKmLabel">—</span></div>
       <div class="range-slider" id="abRangeWrap">
         <div class="track"></div>
         <div class="track-fill" id="abTrackFill"></div>
-        <input type="range" id="sliderA" min="0" max="0" step="1" value="0" disabled />
-        <input type="range" id="sliderB" min="0" max="0" step="1" value="0" disabled />
+        <input type="range" id="sliderA" min="0" max="0" step="1" value="0" />
+        <input type="range" id="sliderB" min="0" max="0" step="1" value="0" />
       </div>
-      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--ink-dim); margin-top:2px;">
-        <span id="aKmLabel">—</span>
-        <span id="bKmLabel">—</span>
-      </div>
+      <div class="minmax-row"><span id="aKmLabel">—</span><span id="bKmLabel">—</span></div>
 
-      <button class="secondary" id="resetAB" style="display:none; margin-top:8px;">Usar ruta completa</button>
-    </div>
-
-    <div class="step">
-      <div class="step-label">
-        <span><span class="n">3.</span>Radio de búsqueda</span>
-        <span class="radius-value" id="radiusLabel">120 m</span>
-      </div>
+      <div class="step-label" style="margin-top:12px;"><span>Radio de búsqueda</span><span class="radius-value" id="radiusLabel">120 m</span></div>
       <input type="range" id="radiusSlider" min="50" max="500" step="10" value="120" />
-    </div>
 
-    <div class="step">
-      <div class="step-label"><span><span class="n">4.</span>Categoría</span></div>
       <div class="pill">Shelters / refugios (fijo en este prototipo)</div>
+
+      <button id="searchBtn" class="wide" style="margin-top:12px;">Buscar refugios</button>
+
+      <div style="display:flex; gap:6px; margin-top:12px;">
+        <input type="text" id="saveNameInput" placeholder="Nombre de la ruta" />
+        <button id="saveRouteBtn" class="secondary btn-sm">Guardar</button>
+      </div>
+
+      <button id="newRouteBtn" class="secondary wide" style="margin-top:8px;">Cargar otro GPX</button>
     </div>
 
-    <button id="searchBtn" disabled>Buscar refugios</button>
-    <div id="status"></div>
+    <div id="cardStatus" class="card-status"></div>
 
-    <div class="step" id="exportStep" style="display:none; margin-top:14px; border-top:1px solid var(--panel-border); padding-top:12px;">
-      <div class="step-label"><span><span class="n">5.</span>Exportar</span></div>
-      <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--ink-dim); margin-bottom:6px;">
-        <input type="radio" name="exportMode" value="both" checked> Ruta + waypoints
-      </label>
-      <label style="display:flex; align-items:center; gap:6px; font-size:13px; color: var(--ink-dim); margin-bottom:8px;">
-        <input type="radio" name="exportMode" value="waypoints"> Solo waypoints
-      </label>
-      <button class="secondary" id="exportBtn">Exportar GPX</button>
+    <div id="savedRoutesSection">
+      <div class="step-label"><span>Mis rutas guardadas</span></div>
+      <div id="savedRoutesList"></div>
     </div>
   </div>
+
+  <div id="infoPill" hidden></div>
+
+  <div id="exportFab" hidden>
+    <button id="exportBoth" class="export-option opt2">Ruta + waypoints</button>
+    <button id="exportWaypoints" class="export-option opt1">Solo waypoints</button>
+    <button id="exportToggle" class="fab" title="Exportar">⇩</button>
+  </div>
+
+  <div id="toast" hidden></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 <script>
 (function () {
-  const map = L.map('map', { zoomControl: true }).setView([28.36, -14.05], 10);
+  // Vista inicial: Dinamarca
+  const map = L.map('map', { zoomControl: true }).setView([56.2639, 9.5018], 7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap'
   }).addTo(map);
 
-  let trackPoints = [];      // [{lat, lon, dist}], dist = distancia acumulada en km
-  let routeLine = null;      // capa Leaflet de la ruta completa
-  let highlightLine = null;  // resalta el tramo A-B seleccionado
+  let trackPoints = [];
+  let routeLine = null;
+  let highlightLine = null;
   let markerA = null, markerB = null;
   let idxA = null, idxB = null;
   let bufferLayer = null;
-  let currentBuffer = null;  // { buffered, sub } — corredor vigente, para preview y para la búsqueda
+  let currentBuffer = null;
   let resultsLayer = L.layerGroup().addTo(map);
-  let lastResults = [];      // últimos POIs encontrados, para exportar
-  let lastSub = [];          // puntos del tramo A-B usado en la última búsqueda
+  let lastResults = [];
+  let lastSub = [];
 
   const el = (id) => document.getElementById(id);
-  const statusEl = el('status');
+  const settingsBtn = el('settingsBtn');
+  const settingsCard = el('settingsCard');
+  const uploadSection = el('uploadSection');
+  const routeSection = el('routeSection');
+  const cardStatus = el('cardStatus');
   const searchBtn = el('searchBtn');
   const radiusSlider = el('radiusSlider');
   const radiusLabel = el('radiusLabel');
-  const abInstructions = el('abInstructions');
   const abKmLabel = el('abKmLabel');
   const sliderA = el('sliderA');
   const sliderB = el('sliderB');
   const abTrackFill = el('abTrackFill');
   const aKmLabel = el('aKmLabel');
   const bKmLabel = el('bKmLabel');
-  const resetABBtn = el('resetAB');
-  const exportStep = el('exportStep');
-  const exportBtn = el('exportBtn');
+  const newRouteBtn = el('newRouteBtn');
+  const saveNameInput = el('saveNameInput');
+  const saveRouteBtn = el('saveRouteBtn');
+  const savedRoutesList = el('savedRoutesList');
+  const infoPill = el('infoPill');
+  const exportFab = el('exportFab');
+  const exportToggle = el('exportToggle');
+  const exportBoth = el('exportBoth');
+  const exportWaypoints = el('exportWaypoints');
+  const toast = el('toast');
+  const gpsBtn = el('gpsBtn');
 
-  radiusSlider.addEventListener('input', () => {
-    radiusLabel.textContent = radiusSlider.value + ' m';
-    computeBufferPreview();
-  });
-
+  // --- Utilidades de estado / avisos ---
   function setStatus(msg, isErr) {
-    statusEl.textContent = msg;
-    statusEl.className = isErr ? 'err' : '';
+    cardStatus.textContent = msg;
+    cardStatus.className = 'card-status' + (isErr ? ' err' : '');
+    if (isErr) showToast(msg);
   }
+  let toastTimer = null;
+  function showToast(msg, ms) {
+    toast.textContent = msg;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.hidden = true; }, ms || 3500);
+  }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  settingsBtn.addEventListener('click', () => {
+    settingsCard.hidden = !settingsCard.hidden;
+    if (!settingsCard.hidden) refreshSavedRoutes();
+  });
 
   // --- Haversine en km ---
   function haversine(lat1, lon1, lat2, lon2) {
@@ -193,50 +267,33 @@
   }
 
   // --- Parseo de GPX respetando segmentos/tracks separados ---
-  // Un GPX puede tener varios <trk>, y cada <trk> varios <trkseg> (p.ej. por
-  // pausas al grabar). Unir todos los trkpt en una sola lista, sin respetar
-  // esos cortes, hace que se dibuje una línea recta uniendo el final de un
-  // segmento con el inicio del siguiente aunque estén lejos entre sí — el
-  // efecto de "conecta puntos donde no debe". Por eso aquí se agrupan por
-  // segmento y, en este prototipo, se usa solo el segmento más largo.
   function segLength(pts) {
     let d = 0;
-    for (let i = 1; i < pts.length; i++) {
-      d += haversine(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon);
-    }
+    for (let i = 1; i < pts.length; i++) d += haversine(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon);
     return d;
   }
 
   function parseGPX(text) {
     const xml = new DOMParser().parseFromString(text, 'application/xml');
     const segments = [];
-
     const trkSegs = Array.from(xml.getElementsByTagName('trkseg'));
     trkSegs.forEach(seg => {
       const pts = Array.from(seg.getElementsByTagName('trkpt')).map(p => ({
-        lat: parseFloat(p.getAttribute('lat')),
-        lon: parseFloat(p.getAttribute('lon'))
+        lat: parseFloat(p.getAttribute('lat')), lon: parseFloat(p.getAttribute('lon'))
       }));
       if (pts.length >= 2) segments.push(pts);
     });
-
     if (segments.length === 0) {
-      // Fallback: GPX de tipo ruta (rtept), o trkpt sueltos sin trkseg
       let pts = Array.from(xml.getElementsByTagName('rtept'));
       if (pts.length === 0) pts = Array.from(xml.getElementsByTagName('trkpt'));
       if (pts.length === 0) throw new Error('No se encontraron puntos trkpt/rtept en el GPX.');
-      segments.push(pts.map(p => ({
-        lat: parseFloat(p.getAttribute('lat')),
-        lon: parseFloat(p.getAttribute('lon'))
-      })));
+      segments.push(pts.map(p => ({ lat: parseFloat(p.getAttribute('lat')), lon: parseFloat(p.getAttribute('lon')) })));
     }
-
     let chosen = segments[0], chosenLen = segLength(segments[0]);
     for (let i = 1; i < segments.length; i++) {
       const len = segLength(segments[i]);
       if (len > chosenLen) { chosen = segments[i]; chosenLen = len; }
     }
-
     let dist = 0;
     chosen[0].dist = 0;
     for (let i = 1; i < chosen.length; i++) {
@@ -247,60 +304,92 @@
     return chosen;
   }
 
-  function loadRoute(points) {
-    trackPoints = points;
+  // --- Cargar una ruta en el mapa (GPX nuevo o restaurada desde IndexedDB) ---
+  function loadRoute(points, restoreState) {
     if (markerA) { map.removeLayer(markerA); markerA = null; }
     if (markerB) { map.removeLayer(markerB); markerB = null; }
     if (routeLine) map.removeLayer(routeLine);
     if (highlightLine) { map.removeLayer(highlightLine); highlightLine = null; }
     if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
     resultsLayer.clearLayers();
-    exportStep.style.display = 'none';
     lastResults = []; lastSub = []; currentBuffer = null;
 
+    trackPoints = points;
     const latlngs = points.map(p => [p.lat, p.lon]);
     routeLine = L.polyline(latlngs, { color: '#5fb488', weight: 4, opacity: 0.85 }).addTo(map);
     map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
 
-    // A al inicio, B al final por defecto. Los marcadores son solo indicativos
-    // sobre el mapa — la posición se controla con los sliders del panel.
-    idxA = 0;
-    idxB = points.length - 1;
-    markerA = L.marker([points[idxA].lat, points[idxA].lon])
-      .bindTooltip('A', { permanent: true, direction: 'top' }).addTo(map);
-    markerB = L.marker([points[idxB].lat, points[idxB].lon])
-      .bindTooltip('B', { permanent: true, direction: 'top' }).addTo(map);
+    idxA = restoreState ? clamp(restoreState.idxA, 0, points.length - 1) : 0;
+    idxB = restoreState ? clamp(restoreState.idxB, 0, points.length - 1) : points.length - 1;
+    const radiusVal = (restoreState && restoreState.radius) ? restoreState.radius : 120;
+    radiusSlider.value = radiusVal;
+    radiusLabel.textContent = radiusVal + ' m';
 
-    sliderA.min = 0; sliderA.max = points.length - 1; sliderA.value = idxA; sliderA.disabled = false;
-    sliderB.min = 0; sliderB.max = points.length - 1; sliderB.value = idxB; sliderB.disabled = false;
+    markerA = L.marker([points[idxA].lat, points[idxA].lon]).bindTooltip('A', { permanent: true, direction: 'top' }).addTo(map);
+    markerB = L.marker([points[idxB].lat, points[idxB].lon]).bindTooltip('B', { permanent: true, direction: 'top' }).addTo(map);
 
-    abInstructions.textContent = 'Ajusta los puntos A y B con los deslizadores';
-    resetABBtn.style.display = 'block';
-    searchBtn.disabled = false;
+    sliderA.min = 0; sliderA.max = points.length - 1; sliderA.value = idxA;
+    sliderB.min = 0; sliderB.max = points.length - 1; sliderB.value = idxB;
 
-    updateSelection(false);
+    uploadSection.hidden = true;
+    routeSection.hidden = false;
+
+    if (restoreState && restoreState.results && restoreState.results.length) {
+      restoreState.results.forEach(r => {
+        const marker = L.circleMarker([r.lat, r.lon], {
+          radius: 7, color: '#d98a4f', weight: 2, fillColor: '#d98a4f', fillOpacity: 0.7
+        }).bindPopup('<b>' + r.name + '</b><br>' + r.tipo);
+        resultsLayer.addLayer(marker);
+        lastResults.push(r);
+      });
+      const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
+      lastSub = trackPoints.slice(lo, hi + 1);
+    }
+
+    updateSelection();
+    exportFab.hidden = !lastResults.length;
 
     const meta = points._meta;
     let msg = 'Ruta cargada: ' + points.length + ' puntos, ' + points[points.length-1].dist.toFixed(1) + ' km.';
     if (meta && meta.totalSegments > 1) {
-      msg += ' Aviso: el GPX tenía ' + meta.totalSegments + ' segmentos/tracks separados; se ha usado solo el más largo (' + meta.usedLengthKm.toFixed(1) + ' km). Si tu ruta real está repartida en varios tramos, dímelo y lo tratamos aparte.';
+      msg += ' Aviso: el GPX tenía ' + meta.totalSegments + ' segmentos/tracks separados; se ha usado solo el más largo (' + meta.usedLengthKm.toFixed(1) + ' km).';
     }
     setStatus(msg);
   }
 
-  function nearestIndex(latlng) {
-    let best = 0, bestD = Infinity;
-    for (let i = 0; i < trackPoints.length; i++) {
-      const d = haversine(latlng.lat, latlng.lng, trackPoints[i].lat, trackPoints[i].lon);
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    return best;
-  }
+  el('gpxFile').addEventListener('change', (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const points = parseGPX(reader.result);
+        loadRoute(points);
+      } catch (err) {
+        setStatus('Error al leer el GPX: ' + err.message, true);
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  newRouteBtn.addEventListener('click', () => {
+    trackPoints = [];
+    if (markerA) { map.removeLayer(markerA); markerA = null; }
+    if (markerB) { map.removeLayer(markerB); markerB = null; }
+    if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+    if (highlightLine) { map.removeLayer(highlightLine); highlightLine = null; }
+    if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
+    resultsLayer.clearLayers();
+    lastResults = []; lastSub = []; currentBuffer = null;
+    el('gpxFile').value = '';
+    uploadSection.hidden = false;
+    routeSection.hidden = true;
+    infoPill.hidden = true;
+    exportFab.hidden = true;
+    setStatus('');
+  });
 
   // --- Slider de rango con dos tiradores: A (valor bajo) y B (valor alto) ---
-  // Dos <input type="range"> superpuestos sobre el mismo eje; cada uno solo es
-  // "agarrable" por su tirador visible (el resto es transparente a los clics).
-  // Se fuerza A <= B para que no se crucen.
   function onSliderAInput() {
     let v = parseInt(sliderA.value, 10);
     const vb = parseInt(sliderB.value, 10);
@@ -321,18 +410,19 @@
   sliderB.addEventListener('input', onSliderBInput);
   sliderA.addEventListener('change', () => { if (lastResults.length) setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.'); });
   sliderB.addEventListener('change', () => { if (lastResults.length) setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.'); });
-  // Trae al frente el tirador que se está tocando, para poder agarrarlo aunque
-  // ambos tiradores coincidan en la misma posición.
   sliderA.addEventListener('pointerdown', () => { sliderA.style.zIndex = 3; sliderB.style.zIndex = 2; });
   sliderB.addEventListener('pointerdown', () => { sliderB.style.zIndex = 3; sliderA.style.zIndex = 2; });
+  radiusSlider.addEventListener('input', () => {
+    radiusLabel.textContent = radiusSlider.value + ' m';
+    computeBufferPreview();
+    updateInfoPill();
+  });
 
   function updateTrackFill() {
     const min = parseInt(sliderA.min, 10), max = parseInt(sliderA.max, 10) || 1;
     const span = (max - min) || 1;
-    const pctA = ((idxA - min) / span) * 100;
-    const pctB = ((idxB - min) / span) * 100;
-    abTrackFill.style.left = pctA + '%';
-    abTrackFill.style.width = (pctB - pctA) + '%';
+    abTrackFill.style.left = (((idxA - min) / span) * 100) + '%';
+    abTrackFill.style.width = ((((idxB - min) / span) * 100) - (((idxA - min) / span) * 100)) + '%';
   }
 
   function updateSelection() {
@@ -349,11 +439,20 @@
 
     searchBtn.disabled = (lo === hi);
     computeBufferPreview();
+    updateInfoPill();
+  }
+
+  function updateInfoPill() {
+    if (!trackPoints.length) { infoPill.hidden = true; return; }
+    infoPill.hidden = false;
+    const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
+    const km = (trackPoints[hi].dist - trackPoints[lo].dist).toFixed(1);
+    let txt = 'Tramo: ' + km + ' km · Radio: ' + radiusSlider.value + ' m';
+    if (lastResults.length) txt += ' · ' + lastResults.length + ' refugios';
+    infoPill.textContent = txt;
   }
 
   // --- Vista previa del corredor de búsqueda (polígono-serpiente) ---
-  // Se recalcula cada vez que cambia el tramo o el radio, para ver antes de
-  // buscar dónde se va a buscar exactamente.
   function computeBufferPreview() {
     if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
     if (idxA === null || idxB === null || !trackPoints.length) { currentBuffer = null; return; }
@@ -368,7 +467,6 @@
     buffered = turf.simplify(buffered, { tolerance: 0.0004, highQuality: false });
 
     if (buffered.geometry.type === 'MultiPolygon') {
-      // Prototipo: si el buffer se parte en varios polígonos, usamos el de mayor área
       let best = null, bestArea = -1;
       buffered.geometry.coordinates.forEach(coords => {
         const poly = turf.polygon(coords);
@@ -385,42 +483,15 @@
     currentBuffer = { buffered, sub };
   }
 
-  resetABBtn.addEventListener('click', () => {
-    idxA = 0;
-    idxB = trackPoints.length - 1;
-    sliderA.value = idxA;
-    sliderB.value = idxB;
-    markerA.setLatLng([trackPoints[idxA].lat, trackPoints[idxA].lon]);
-    markerB.setLatLng([trackPoints[idxB].lat, trackPoints[idxB].lon]);
-    updateSelection();
-    if (lastResults.length) setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.');
-  });
-
-  el('gpxFile').addEventListener('change', (ev) => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const points = parseGPX(reader.result);
-        loadRoute(points);
-      } catch (err) {
-        setStatus('Error al leer el GPX: ' + err.message, true);
-      }
-    };
-    reader.readAsText(file);
-  });
-
-  // --- Construir el polígono-serpiente y consultar Overpass ---
+  // --- Buscar refugios vía Overpass ---
   function polyToOverpassString(polygonFeature) {
-    // polygonFeature: Feature<Polygon> de turf, coords en [lon, lat]
     const ring = polygonFeature.geometry.coordinates[0];
     return ring.map(c => c[1].toFixed(6) + ' ' + c[0].toFixed(6)).join(' ');
   }
 
   async function searchShelters() {
     if (idxA === null || idxB === null) return;
-    computeBufferPreview(); // asegura que el corredor está actualizado con el tramo/radio actuales
+    computeBufferPreview();
     if (!currentBuffer) {
       setStatus('El tramo seleccionado es demasiado corto.', true);
       return;
@@ -447,10 +518,7 @@
     for (let i = 0; i < mirrors.length; i++) {
       try {
         setStatus('Consultando Overpass' + (i > 0 ? ' (mirror ' + (i+1) + ')' : '') + '…');
-        const resp = await fetch(mirrors[i], {
-          method: 'POST',
-          body: 'data=' + encodeURIComponent(query)
-        });
+        const resp = await fetch(mirrors[i], { method: 'POST', body: 'data=' + encodeURIComponent(query) });
         if (!resp.ok) throw new Error('respondió ' + resp.status);
         const data = await resp.json();
         renderResults(data.elements || []);
@@ -461,7 +529,7 @@
       }
     }
     if (lastErr) {
-      setStatus('Error consultando Overpass tras probar ' + mirrors.length + ' mirrors: ' + lastErr.message + '. Si el archivo se abrió con doble clic (file://), prueba a abrirlo dentro de una pestaña normal del navegador.', true);
+      setStatus('Error consultando Overpass tras probar ' + mirrors.length + ' mirrors: ' + lastErr.message, true);
     }
     searchBtn.disabled = false;
   }
@@ -482,10 +550,13 @@
       lastResults.push({ lat, lon, name, tipo });
     });
     setStatus(lastResults.length + ' refugio(s) encontrado(s) en el corredor.');
-    exportStep.style.display = lastResults.length ? 'block' : 'none';
+    exportFab.hidden = !lastResults.length;
+    updateInfoPill();
   }
 
-  // --- Exportar a GPX: ruta (tramo A-B) + waypoints, o solo waypoints ---
+  searchBtn.addEventListener('click', searchShelters);
+
+  // --- Exportar a GPX ---
   function escapeXml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -494,29 +565,23 @@
     const parts = [];
     parts.push('<?xml version="1.0" encoding="UTF-8"?>');
     parts.push('<gpx version="1.1" creator="EnRuta" xmlns="http://www.topografix.com/GPX/1/1">');
-
     lastResults.forEach(r => {
       parts.push('  <wpt lat="' + r.lat.toFixed(6) + '" lon="' + r.lon.toFixed(6) + '">');
       parts.push('    <name>' + escapeXml(r.name) + '</name>');
       parts.push('    <type>' + escapeXml(r.tipo) + '</type>');
       parts.push('  </wpt>');
     });
-
     if (mode === 'both' && lastSub.length > 1) {
       parts.push('  <trk><name>EnRuta - tramo</name><trkseg>');
-      lastSub.forEach(p => {
-        parts.push('    <trkpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lon.toFixed(6) + '"></trkpt>');
-      });
+      lastSub.forEach(p => parts.push('    <trkpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lon.toFixed(6) + '"></trkpt>'));
       parts.push('  </trkseg></trk>');
     }
-
     parts.push('</gpx>');
     return parts.join('\n');
   }
 
-  exportBtn.addEventListener('click', () => {
+  function downloadGPX(mode) {
     if (!lastResults.length) return;
-    const mode = document.querySelector('input[name="exportMode"]:checked').value;
     const gpxText = buildGPX(mode);
     const blob = new Blob([gpxText], { type: 'application/gpx+xml' });
     const url = URL.createObjectURL(blob);
@@ -527,9 +592,189 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  exportToggle.addEventListener('click', () => exportFab.classList.toggle('open'));
+  exportBoth.addEventListener('click', () => { downloadGPX('both'); exportFab.classList.remove('open'); });
+  exportWaypoints.addEventListener('click', () => { downloadGPX('waypoints'); exportFab.classList.remove('open'); });
+
+  // --- Guardar / cargar rutas en IndexedDB ---
+  const DB_NAME = 'enruta-db';
+  const STORE = 'routes';
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbSaveRoute(record) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).add(record);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function dbGetAllRoutes() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbGetRoute(id) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbDeleteRoute(id) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function refreshSavedRoutes() {
+    try {
+      const routes = await dbGetAllRoutes();
+      renderSavedRoutesList(routes);
+    } catch (err) {
+      savedRoutesList.textContent = 'No se pudo leer el almacenamiento local.';
+    }
+  }
+
+  function renderSavedRoutesList(routes) {
+    savedRoutesList.innerHTML = '';
+    if (!routes.length) {
+      const p = document.createElement('div');
+      p.className = 'pill';
+      p.textContent = 'Aún no hay rutas guardadas';
+      savedRoutesList.appendChild(p);
+      return;
+    }
+    routes.sort((a, b) => b.savedAt - a.savedAt).forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'saved-route-row';
+
+      const info = document.createElement('div');
+      info.className = 'saved-route-info';
+      const totalKm = r.trackPoints.length ? r.trackPoints[r.trackPoints.length - 1].dist.toFixed(1) : '0';
+      const nameEl = document.createElement('b');
+      nameEl.textContent = r.name;
+      const metaEl = document.createElement('div');
+      metaEl.className = 'dim';
+      metaEl.textContent = totalKm + ' km · ' + (r.results ? r.results.length : 0) + ' refugios';
+      info.appendChild(nameEl); info.appendChild(metaEl);
+
+      const actions = document.createElement('div');
+      actions.className = 'saved-route-actions';
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'secondary btn-sm'; loadBtn.textContent = 'Cargar';
+      loadBtn.addEventListener('click', () => loadSavedRoute(r.id));
+      const delBtn = document.createElement('button');
+      delBtn.className = 'secondary btn-sm'; delBtn.textContent = '✕';
+      delBtn.addEventListener('click', async () => { await dbDeleteRoute(r.id); refreshSavedRoutes(); });
+
+      actions.appendChild(loadBtn); actions.appendChild(delBtn);
+      row.appendChild(info); row.appendChild(actions);
+      savedRoutesList.appendChild(row);
+    });
+  }
+
+  async function loadSavedRoute(id) {
+    try {
+      const r = await dbGetRoute(id);
+      if (!r) { setStatus('No se ha encontrado esa ruta guardada.', true); return; }
+      loadRoute(r.trackPoints, { idxA: r.idxA, idxB: r.idxB, radius: r.radius, results: r.results });
+      setStatus('Ruta "' + r.name + '" cargada.');
+    } catch (err) {
+      setStatus('Error al cargar la ruta guardada: ' + err.message, true);
+    }
+  }
+
+  saveRouteBtn.addEventListener('click', async () => {
+    if (!trackPoints.length) return;
+    const name = saveNameInput.value.trim() || ('Ruta ' + new Date().toLocaleDateString());
+    const record = {
+      name,
+      savedAt: Date.now(),
+      trackPoints,
+      idxA, idxB,
+      radius: parseInt(radiusSlider.value, 10),
+      results: lastResults
+    };
+    try {
+      await dbSaveRoute(record);
+      saveNameInput.value = '';
+      setStatus('Ruta guardada.');
+      refreshSavedRoutes();
+    } catch (err) {
+      setStatus('Error al guardar: ' + err.message, true);
+    }
   });
 
-  searchBtn.addEventListener('click', searchShelters);
+  refreshSavedRoutes();
+
+  // --- GPS: seguir posición en directo ---
+  let watchId = null;
+  let following = false;
+  let hasCenteredOnce = false;
+  let userMarker = null, userAccuracyCircle = null;
+
+  gpsBtn.addEventListener('click', () => { following ? stopFollow() : startFollow(); });
+
+  function startFollow() {
+    if (!navigator.geolocation) { showToast('Este navegador no soporta geolocalización.'); return; }
+    following = true;
+    hasCenteredOnce = false;
+    gpsBtn.classList.add('active');
+    watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
+      enableHighAccuracy: true, maximumAge: 2000, timeout: 15000
+    });
+  }
+  function stopFollow() {
+    following = false;
+    gpsBtn.classList.remove('active');
+    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  }
+  function onPosition(pos) {
+    const { latitude, longitude, accuracy } = pos.coords;
+    if (!userMarker) {
+      userMarker = L.circleMarker([latitude, longitude], {
+        radius: 8, color: '#4a90d9', weight: 2, fillColor: '#4a90d9', fillOpacity: 0.9
+      }).addTo(map);
+      userAccuracyCircle = L.circle([latitude, longitude], {
+        radius: accuracy, color: '#4a90d9', weight: 1, fillColor: '#4a90d9', fillOpacity: 0.12
+      }).addTo(map);
+    } else {
+      userMarker.setLatLng([latitude, longitude]);
+      userAccuracyCircle.setLatLng([latitude, longitude]);
+      userAccuracyCircle.setRadius(accuracy);
+    }
+    if (following) {
+      if (!hasCenteredOnce) { map.setView([latitude, longitude], 16); hasCenteredOnce = true; }
+      else map.panTo([latitude, longitude]);
+    }
+  }
+  function onPositionError(err) {
+    showToast('Error de geolocalización: ' + err.message);
+    stopFollow();
+  }
 })();
 </script>
 </body>
