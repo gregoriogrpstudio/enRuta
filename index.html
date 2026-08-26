@@ -95,11 +95,19 @@
   .cat-chip input { accent-color: var(--accent); margin: 0; }
 
   /* --- Selector de capas de mapa --- */
-  .layer-option {
-    display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);
-    padding: 8px 4px; cursor: pointer; border-radius: 8px;
+  /* --- Control flotante de capa del mapa (icono + desplegable nativo) --- */
+  .layers-control {
+    position: fixed; top: 72px; right: 16px; z-index: 1000;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 24px;
+    display: flex; align-items: center; gap: 6px; padding: 8px 12px 8px 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.35);
   }
-  .layer-option input { accent-color: var(--accent); margin: 0; }
+  .layers-control .layers-icon { font-size: 16px; line-height: 1; }
+  .layers-control select {
+    background: transparent; border: none; color: var(--ink); font-size: 13px;
+    font-weight: 600; outline: none; cursor: pointer; -webkit-appearance: none; appearance: none;
+  }
+  .layers-control select option { background: var(--panel); color: var(--ink); }
 
   /* --- Barra de progreso indeterminada mientras se busca --- */
   .progress-bar { height: 4px; background: var(--panel-border); border-radius: 2px; overflow: hidden; margin-top: 8px; }
@@ -159,6 +167,13 @@
   #toast[hidden] { display: none; }
 
   .leaflet-popup-content { font-size: 13px; }
+  .poi-popup .poi-coords { color: #666; font-size: 11px; }
+  .poi-popup-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .poi-popup-btn {
+    flex: 1; text-align: center; font-size: 12px; font-weight: 600; text-decoration: none;
+    background: var(--accent-dim); color: #fff; border: none; border-radius: 6px;
+    padding: 6px 8px; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -168,17 +183,21 @@
   <button id="gpsBtn" class="fab" title="Seguir mi posición">◎</button>
   <button id="settingsBtn" class="fab" title="Ajustes">⚙</button>
 
+  <div class="layers-control">
+    <span class="layers-icon">▦</span>
+    <select id="mapLayerSelect" title="Capa del mapa">
+      <option value="osm">OpenStreetMap</option>
+      <option value="bici">Bici (CyclOSM)</option>
+      <option value="outdoors">Outdoors</option>
+      <option value="satellite">Satélite</option>
+    </select>
+  </div>
+
   <!-- Tarjeta de ajustes: solo importar / guardar / gestionar rutas -->
   <div id="settingsCard" class="floating-card" hidden>
     <div class="card-header">EnRuta</div>
 
-    <div class="step-label"><span>Capa del mapa</span></div>
-    <label class="layer-option"><input type="radio" name="mapLayer" value="osm" checked> OpenStreetMap</label>
-    <label class="layer-option"><input type="radio" name="mapLayer" value="bici"> Bici (CyclOSM)</label>
-    <label class="layer-option"><input type="radio" name="mapLayer" value="outdoors"> Outdoors (topográfico)</label>
-    <label class="layer-option"><input type="radio" name="mapLayer" value="satellite"> Satélite</label>
-
-    <div id="uploadSection" style="margin-top:12px; border-top:1px solid var(--panel-border); padding-top:12px;">
+    <div id="uploadSection" style="margin-top:0; border-top:none; padding-top:0;">
       <div class="step-label"><span>Importar ruta (GPX)</span></div>
       <input type="file" id="gpxFile" accept=".gpx" />
     </div>
@@ -305,9 +324,8 @@
   const toast = el('toast');
   const gpsBtn = el('gpsBtn');
 
-  document.querySelectorAll('input[name="mapLayer"]').forEach(radio => {
-    radio.addEventListener('change', () => { if (radio.checked) setBaseLayer(radio.value); });
-  });
+  const mapLayerSelect = el('mapLayerSelect');
+  mapLayerSelect.addEventListener('change', () => setBaseLayer(mapLayerSelect.value));
 
   // --- Utilidades de estado / avisos ---
   function setStatus(msg, isErr) {
@@ -353,6 +371,45 @@
       iconAnchor: [13, 13]
     });
   }
+
+  // --- Popup de cada resultado: nombre, categoría, coords, Maps y copiar ---
+  function escapeHtmlAttr(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function buildPopupHTML(name, label, lat, lon) {
+    const latStr = lat.toFixed(6), lonStr = lon.toFixed(6);
+    const coordsText = latStr + ', ' + lonStr;
+    const gmapsUrl = 'https://www.google.com/maps?q=' + latStr + ',' + lonStr;
+    return '' +
+      '<div class="poi-popup">' +
+        '<b>' + escapeHtmlAttr(name) + '</b><br>' +
+        escapeHtmlAttr(label) + '<br>' +
+        '<span class="poi-coords">' + coordsText + '</span>' +
+        '<div class="poi-popup-actions">' +
+          '<a href="' + gmapsUrl + '" target="_blank" rel="noopener" class="poi-popup-btn">Abrir en Maps</a>' +
+          '<button type="button" class="poi-popup-btn" onclick="window.enrutaCopyCoords(\'' + coordsText + '\')">Copiar</button>' +
+        '</div>' +
+      '</div>';
+  }
+  // El botón del popup usa un onclick inline, así que necesita colgar de
+  // window (el contenido del popup se inserta como HTML plano, fuera del
+  // cierre normal de este script).
+  window.enrutaCopyCoords = async function (text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast('Coordenadas copiadas: ' + text, 2000);
+    } catch (err) {
+      showToast('No se pudieron copiar las coordenadas.', 3000);
+    }
+  };
 
   settingsBtn.addEventListener('click', () => {
     settingsCard.hidden = !settingsCard.hidden;
@@ -437,7 +494,7 @@
       restoreState.results.forEach(r => {
         const type = r.type || 'shelter';
         const marker = L.marker([r.lat, r.lon], { icon: makeDivIcon(type) })
-          .bindPopup('<b>' + r.name + '</b><br>' + (CAT_META[type] ? CAT_META[type].label : ''));
+          .bindPopup(buildPopupHTML(r.name, CAT_META[type] ? CAT_META[type].label : '', r.lat, r.lon));
         resultsLayer.addLayer(marker);
         lastResults.push(r);
       });
@@ -720,7 +777,7 @@
       if (!type) return;
       const name = tags.name || (CAT_META[type].label + ' sin nombre');
       const marker = L.marker([lat, lon], { icon: makeDivIcon(type) })
-        .bindPopup('<b>' + name + '</b><br>' + CAT_META[type].label);
+        .bindPopup(buildPopupHTML(name, CAT_META[type].label, lat, lon));
       resultsLayer.addLayer(marker);
       lastResults.push({ lat, lon, name, type });
       counts[type]++;
