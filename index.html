@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>DePaseo</title>
+<title>EnRuta</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root {
@@ -54,7 +54,7 @@
 <div id="app">
   <div id="map"></div>
   <div id="panel">
-    <h1>DePaseo</h1>
+    <h1>EnRuta</h1>
 
     <div class="step">
       <div class="step-label"><span><span class="n">1.</span>Importar ruta (GPX)</span></div>
@@ -67,7 +67,17 @@
         <span class="radius-value" id="abKmLabel">—</span>
       </div>
       <div id="abInstructions" class="pill">Carga una ruta primero</div>
-      <button class="secondary" id="resetAB" style="display:none;">Usar ruta completa</button>
+
+      <div style="margin-top:8px;">
+        <div class="step-label"><span>Punto A</span><span id="aKmLabel">—</span></div>
+        <input type="range" id="sliderA" min="0" max="0" step="1" value="0" disabled />
+      </div>
+      <div style="margin-top:6px;">
+        <div class="step-label"><span>Punto B</span><span id="bKmLabel">—</span></div>
+        <input type="range" id="sliderB" min="0" max="0" step="1" value="0" disabled />
+      </div>
+
+      <button class="secondary" id="resetAB" style="display:none; margin-top:8px;">Usar ruta completa</button>
     </div>
 
     <div class="step">
@@ -115,6 +125,7 @@
   let markerA = null, markerB = null;
   let idxA = null, idxB = null;
   let bufferLayer = null;
+  let currentBuffer = null;  // { buffered, sub } — corredor vigente, para preview y para la búsqueda
   let resultsLayer = L.layerGroup().addTo(map);
   let lastResults = [];      // últimos POIs encontrados, para exportar
   let lastSub = [];          // puntos del tramo A-B usado en la última búsqueda
@@ -126,12 +137,17 @@
   const radiusLabel = el('radiusLabel');
   const abInstructions = el('abInstructions');
   const abKmLabel = el('abKmLabel');
+  const sliderA = el('sliderA');
+  const sliderB = el('sliderB');
+  const aKmLabel = el('aKmLabel');
+  const bKmLabel = el('bKmLabel');
   const resetABBtn = el('resetAB');
   const exportStep = el('exportStep');
   const exportBtn = el('exportBtn');
 
   radiusSlider.addEventListener('input', () => {
     radiusLabel.textContent = radiusSlider.value + ' m';
+    computeBufferPreview();
   });
 
   function setStatus(msg, isErr) {
@@ -212,26 +228,25 @@
     if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
     resultsLayer.clearLayers();
     exportStep.style.display = 'none';
-    lastResults = []; lastSub = [];
+    lastResults = []; lastSub = []; currentBuffer = null;
 
     const latlngs = points.map(p => [p.lat, p.lon]);
     routeLine = L.polyline(latlngs, { color: '#5fb488', weight: 4, opacity: 0.85 }).addTo(map);
     map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
 
-    // Tiradores arrastrables: A al inicio, B al final de la ruta por defecto.
+    // A al inicio, B al final por defecto. Los marcadores son solo indicativos
+    // sobre el mapa — la posición se controla con los sliders del panel.
     idxA = 0;
     idxB = points.length - 1;
-    markerA = L.marker([points[idxA].lat, points[idxA].lon], { draggable: true })
+    markerA = L.marker([points[idxA].lat, points[idxA].lon])
       .bindTooltip('A', { permanent: true, direction: 'top' }).addTo(map);
-    markerB = L.marker([points[idxB].lat, points[idxB].lon], { draggable: true })
+    markerB = L.marker([points[idxB].lat, points[idxB].lon])
       .bindTooltip('B', { permanent: true, direction: 'top' }).addTo(map);
 
-    markerA.on('drag', (e) => onHandleDrag('A', e));
-    markerB.on('drag', (e) => onHandleDrag('B', e));
-    markerA.on('dragend', () => updateSelection(true));
-    markerB.on('dragend', () => updateSelection(true));
+    sliderA.min = 0; sliderA.max = points.length - 1; sliderA.value = idxA; sliderA.disabled = false;
+    sliderB.min = 0; sliderB.max = points.length - 1; sliderB.value = idxB; sliderB.disabled = false;
 
-    abInstructions.textContent = 'Arrastra los tiradores A y B sobre la ruta';
+    abInstructions.textContent = 'Ajusta los puntos A y B con los deslizadores';
     resetABBtn.style.display = 'block';
     searchBtn.disabled = false;
 
@@ -254,37 +269,77 @@
     return best;
   }
 
-  // Mientras se arrastra, el tirador se "engancha" al punto de la ruta más
-  // cercano — así siempre queda sobre la traza, nunca suelto en el mapa.
-  function onHandleDrag(which, e) {
-    const idx = nearestIndex(e.target.getLatLng());
-    const p = trackPoints[idx];
-    e.target.setLatLng([p.lat, p.lon]);
-    if (which === 'A') idxA = idx; else idxB = idx;
+  // --- Sliders A / B: mueven los marcadores sobre el mapa y refrescan la vista previa ---
+  function onSliderInput() {
+    idxA = parseInt(sliderA.value, 10);
+    idxB = parseInt(sliderB.value, 10);
+    markerA.setLatLng([trackPoints[idxA].lat, trackPoints[idxA].lon]);
+    markerB.setLatLng([trackPoints[idxB].lat, trackPoints[idxB].lon]);
     updateSelection(false);
   }
+  sliderA.addEventListener('input', onSliderInput);
+  sliderB.addEventListener('input', onSliderInput);
+  sliderA.addEventListener('change', () => { if (lastResults.length) setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.'); });
+  sliderB.addEventListener('change', () => { if (lastResults.length) setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.'); });
 
-  function updateSelection(recomputeResultsHint) {
+  function updateSelection() {
     const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
     const km = (trackPoints[hi].dist - trackPoints[lo].dist).toFixed(1);
     abKmLabel.textContent = km + ' km';
+    aKmLabel.textContent = trackPoints[idxA].dist.toFixed(1) + ' km';
+    bKmLabel.textContent = trackPoints[idxB].dist.toFixed(1) + ' km';
 
     if (highlightLine) map.removeLayer(highlightLine);
     const sub = trackPoints.slice(lo, hi + 1).map(p => [p.lat, p.lon]);
     highlightLine = L.polyline(sub, { color: '#d98a4f', weight: 5, opacity: 0.95 }).addTo(map);
 
     searchBtn.disabled = (lo === hi);
-    if (recomputeResultsHint && lastResults.length) {
-      setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.');
+    computeBufferPreview();
+  }
+
+  // --- Vista previa del corredor de búsqueda (polígono-serpiente) ---
+  // Se recalcula cada vez que cambia el tramo o el radio, para ver antes de
+  // buscar dónde se va a buscar exactamente.
+  function computeBufferPreview() {
+    if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
+    if (idxA === null || idxB === null || !trackPoints.length) { currentBuffer = null; return; }
+
+    const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
+    const sub = trackPoints.slice(lo, hi + 1);
+    if (sub.length < 2) { currentBuffer = null; return; }
+
+    const line = turf.lineString(sub.map(p => [p.lon, p.lat]));
+    const radiusM = parseInt(radiusSlider.value, 10);
+    let buffered = turf.buffer(line, radiusM / 1000, { units: 'kilometers', steps: 6 });
+    buffered = turf.simplify(buffered, { tolerance: 0.0004, highQuality: false });
+
+    if (buffered.geometry.type === 'MultiPolygon') {
+      // Prototipo: si el buffer se parte en varios polígonos, usamos el de mayor área
+      let best = null, bestArea = -1;
+      buffered.geometry.coordinates.forEach(coords => {
+        const poly = turf.polygon(coords);
+        const a = turf.area(poly);
+        if (a > bestArea) { bestArea = a; best = poly; }
+      });
+      buffered = best;
     }
+
+    bufferLayer = L.geoJSON(buffered, {
+      style: { color: '#d98a4f', weight: 1, fillColor: '#d98a4f', fillOpacity: 0.12 }
+    }).addTo(map);
+
+    currentBuffer = { buffered, sub };
   }
 
   resetABBtn.addEventListener('click', () => {
     idxA = 0;
     idxB = trackPoints.length - 1;
+    sliderA.value = idxA;
+    sliderB.value = idxB;
     markerA.setLatLng([trackPoints[idxA].lat, trackPoints[idxA].lon]);
     markerB.setLatLng([trackPoints[idxB].lat, trackPoints[idxB].lon]);
-    updateSelection(true);
+    updateSelection();
+    if (lastResults.length) setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.');
   });
 
   el('gpxFile').addEventListener('change', (ev) => {
@@ -311,41 +366,17 @@
 
   async function searchShelters() {
     if (idxA === null || idxB === null) return;
-    searchBtn.disabled = true;
-    setStatus('Generando corredor de búsqueda…');
-    resultsLayer.clearLayers();
-    if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
-
-    const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
-    const sub = trackPoints.slice(lo, hi + 1);
-    if (sub.length < 2) {
+    computeBufferPreview(); // asegura que el corredor está actualizado con el tramo/radio actuales
+    if (!currentBuffer) {
       setStatus('El tramo seleccionado es demasiado corto.', true);
-      searchBtn.disabled = false;
       return;
     }
+    searchBtn.disabled = true;
+    setStatus('Consultando Overpass…');
+    resultsLayer.clearLayers();
 
-    lastSub = sub;
-    const line = turf.lineString(sub.map(p => [p.lon, p.lat]));
-    const radiusM = parseInt(radiusSlider.value, 10);
-    let buffered = turf.buffer(line, radiusM / 1000, { units: 'kilometers', steps: 6 });
-    buffered = turf.simplify(buffered, { tolerance: 0.0004, highQuality: false });
-
-    if (buffered.geometry.type === 'MultiPolygon') {
-      // Prototipo: si el buffer se parte en varios polígonos, usamos el de mayor área
-      let best = null, bestArea = -1;
-      buffered.geometry.coordinates.forEach(coords => {
-        const poly = turf.polygon(coords);
-        const a = turf.area(poly);
-        if (a > bestArea) { bestArea = a; best = poly; }
-      });
-      buffered = best;
-    }
-
-    bufferLayer = L.geoJSON(buffered, {
-      style: { color: '#d98a4f', weight: 1, fillColor: '#d98a4f', fillOpacity: 0.12 }
-    }).addTo(map);
-
-    const polyStr = polyToOverpassString(buffered);
+    lastSub = currentBuffer.sub;
+    const polyStr = polyToOverpassString(currentBuffer.buffered);
     const query = `[out:json][timeout:25];(
       node["amenity"="shelter"](poly:"${polyStr}");
       way["amenity"="shelter"](poly:"${polyStr}");
@@ -353,7 +384,6 @@
       node["tourism"="alpine_hut"](poly:"${polyStr}");
     );out center;`;
 
-    setStatus('Consultando Overpass…');
     const mirrors = [
       'https://overpass-api.de/api/interpreter',
       'https://overpass.kumi.systems/api/interpreter',
@@ -409,7 +439,7 @@
   function buildGPX(mode) {
     const parts = [];
     parts.push('<?xml version="1.0" encoding="UTF-8"?>');
-    parts.push('<gpx version="1.1" creator="DePaseo" xmlns="http://www.topografix.com/GPX/1/1">');
+    parts.push('<gpx version="1.1" creator="EnRuta" xmlns="http://www.topografix.com/GPX/1/1">');
 
     lastResults.forEach(r => {
       parts.push('  <wpt lat="' + r.lat.toFixed(6) + '" lon="' + r.lon.toFixed(6) + '">');
@@ -419,7 +449,7 @@
     });
 
     if (mode === 'both' && lastSub.length > 1) {
-      parts.push('  <trk><name>DePaseo - tramo</name><trkseg>');
+      parts.push('  <trk><name>EnRuta - tramo</name><trkseg>');
       lastSub.forEach(p => {
         parts.push('    <trkpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lon.toFixed(6) + '"></trkpt>');
       });
@@ -438,7 +468,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'depaseo-shelters' + (mode === 'waypoints' ? '-waypoints' : '') + '.gpx';
+    a.download = 'enruta-shelters' + (mode === 'waypoints' ? '-waypoints' : '') + '.gpx';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
