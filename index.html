@@ -48,6 +48,31 @@
   #status.err { color: var(--warn); }
   .pill { display: inline-block; background: var(--panel-border); color: var(--ink-dim); font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-top: 4px; }
   .leaflet-popup-content { font-size: 13px; }
+
+  /* Slider de rango con dos tiradores (A y B superpuestos sobre el mismo eje) */
+  .range-slider { position: relative; height: 26px; margin-top: 10px; }
+  .range-slider .track {
+    position: absolute; top: 50%; left: 0; right: 0; height: 4px;
+    background: var(--panel-border); border-radius: 2px; transform: translateY(-50%);
+  }
+  .range-slider .track-fill {
+    position: absolute; top: 50%; height: 4px;
+    background: var(--accent); border-radius: 2px; transform: translateY(-50%);
+  }
+  .range-slider input[type="range"] {
+    position: absolute; top: 0; left: 0; width: 100%; height: 26px; margin: 0;
+    background: transparent; -webkit-appearance: none; appearance: none; pointer-events: none;
+  }
+  .range-slider input[type="range"]::-webkit-slider-runnable-track { background: transparent; }
+  .range-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: auto; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--bg); cursor: pointer; margin-top: 0;
+  }
+  .range-slider input[type="range"]::-moz-range-track { background: transparent; border: none; }
+  .range-slider input[type="range"]::-moz-range-thumb {
+    pointer-events: auto; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -68,13 +93,15 @@
       </div>
       <div id="abInstructions" class="pill">Carga una ruta primero</div>
 
-      <div style="margin-top:8px;">
-        <div class="step-label"><span>Punto A</span><span id="aKmLabel">—</span></div>
+      <div class="range-slider" id="abRangeWrap">
+        <div class="track"></div>
+        <div class="track-fill" id="abTrackFill"></div>
         <input type="range" id="sliderA" min="0" max="0" step="1" value="0" disabled />
-      </div>
-      <div style="margin-top:6px;">
-        <div class="step-label"><span>Punto B</span><span id="bKmLabel">—</span></div>
         <input type="range" id="sliderB" min="0" max="0" step="1" value="0" disabled />
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--ink-dim); margin-top:2px;">
+        <span id="aKmLabel">—</span>
+        <span id="bKmLabel">—</span>
       </div>
 
       <button class="secondary" id="resetAB" style="display:none; margin-top:8px;">Usar ruta completa</button>
@@ -139,6 +166,7 @@
   const abKmLabel = el('abKmLabel');
   const sliderA = el('sliderA');
   const sliderB = el('sliderB');
+  const abTrackFill = el('abTrackFill');
   const aKmLabel = el('aKmLabel');
   const bKmLabel = el('bKmLabel');
   const resetABBtn = el('resetAB');
@@ -269,18 +297,43 @@
     return best;
   }
 
-  // --- Sliders A / B: mueven los marcadores sobre el mapa y refrescan la vista previa ---
-  function onSliderInput() {
-    idxA = parseInt(sliderA.value, 10);
-    idxB = parseInt(sliderB.value, 10);
+  // --- Slider de rango con dos tiradores: A (valor bajo) y B (valor alto) ---
+  // Dos <input type="range"> superpuestos sobre el mismo eje; cada uno solo es
+  // "agarrable" por su tirador visible (el resto es transparente a los clics).
+  // Se fuerza A <= B para que no se crucen.
+  function onSliderAInput() {
+    let v = parseInt(sliderA.value, 10);
+    const vb = parseInt(sliderB.value, 10);
+    if (v > vb) { v = vb; sliderA.value = v; }
+    idxA = v;
     markerA.setLatLng([trackPoints[idxA].lat, trackPoints[idxA].lon]);
-    markerB.setLatLng([trackPoints[idxB].lat, trackPoints[idxB].lon]);
-    updateSelection(false);
+    updateSelection();
   }
-  sliderA.addEventListener('input', onSliderInput);
-  sliderB.addEventListener('input', onSliderInput);
+  function onSliderBInput() {
+    let v = parseInt(sliderB.value, 10);
+    const va = parseInt(sliderA.value, 10);
+    if (v < va) { v = va; sliderB.value = v; }
+    idxB = v;
+    markerB.setLatLng([trackPoints[idxB].lat, trackPoints[idxB].lon]);
+    updateSelection();
+  }
+  sliderA.addEventListener('input', onSliderAInput);
+  sliderB.addEventListener('input', onSliderBInput);
   sliderA.addEventListener('change', () => { if (lastResults.length) setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.'); });
   sliderB.addEventListener('change', () => { if (lastResults.length) setStatus('El tramo ha cambiado — pulsa "Buscar refugios" para actualizar los resultados.'); });
+  // Trae al frente el tirador que se está tocando, para poder agarrarlo aunque
+  // ambos tiradores coincidan en la misma posición.
+  sliderA.addEventListener('pointerdown', () => { sliderA.style.zIndex = 3; sliderB.style.zIndex = 2; });
+  sliderB.addEventListener('pointerdown', () => { sliderB.style.zIndex = 3; sliderA.style.zIndex = 2; });
+
+  function updateTrackFill() {
+    const min = parseInt(sliderA.min, 10), max = parseInt(sliderA.max, 10) || 1;
+    const span = (max - min) || 1;
+    const pctA = ((idxA - min) / span) * 100;
+    const pctB = ((idxB - min) / span) * 100;
+    abTrackFill.style.left = pctA + '%';
+    abTrackFill.style.width = (pctB - pctA) + '%';
+  }
 
   function updateSelection() {
     const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
@@ -288,6 +341,7 @@
     abKmLabel.textContent = km + ' km';
     aKmLabel.textContent = trackPoints[idxA].dist.toFixed(1) + ' km';
     bKmLabel.textContent = trackPoints[idxB].dist.toFixed(1) + ' km';
+    updateTrackFill();
 
     if (highlightLine) map.removeLayer(highlightLine);
     const sub = trackPoints.slice(lo, hi + 1).map(p => [p.lat, p.lon]);
