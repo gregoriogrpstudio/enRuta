@@ -32,7 +32,6 @@
   .fab.active { background: var(--accent-dim); border-color: var(--accent); }
   #settingsBtn { position: fixed; top: 16px; right: 16px; }
   #gpsBtn { position: fixed; top: 16px; right: 72px; }
-  #layersBtn { position: fixed; top: 72px; right: 16px; }
 
   /* --- Tarjeta flotante de ajustes: solo importar / guardar / gestionar --- */
   .floating-card {
@@ -96,7 +95,6 @@
   .cat-chip input { accent-color: var(--accent); margin: 0; }
 
   /* --- Selector de capas de mapa --- */
-  #layersCard { top: 128px; }
   .layer-option {
     display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);
     padding: 8px 4px; cursor: pointer; border-radius: 8px;
@@ -169,21 +167,18 @@
 
   <button id="gpsBtn" class="fab" title="Seguir mi posición">◎</button>
   <button id="settingsBtn" class="fab" title="Ajustes">⚙</button>
-  <button id="layersBtn" class="fab" title="Capas del mapa">▦</button>
-
-  <div id="layersCard" class="floating-card" hidden>
-    <div class="card-header">Capa del mapa</div>
-    <label class="layer-option"><input type="radio" name="mapLayer" value="osm" checked> OpenStreetMap</label>
-    <label class="layer-option"><input type="radio" name="mapLayer" value="bici"> Bici (CyclOSM)</label>
-    <label class="layer-option"><input type="radio" name="mapLayer" value="outdoors"> Outdoors (topográfico)</label>
-    <label class="layer-option"><input type="radio" name="mapLayer" value="satellite"> Satélite</label>
-  </div>
 
   <!-- Tarjeta de ajustes: solo importar / guardar / gestionar rutas -->
   <div id="settingsCard" class="floating-card" hidden>
     <div class="card-header">EnRuta</div>
 
-    <div id="uploadSection">
+    <div class="step-label"><span>Capa del mapa</span></div>
+    <label class="layer-option"><input type="radio" name="mapLayer" value="osm" checked> OpenStreetMap</label>
+    <label class="layer-option"><input type="radio" name="mapLayer" value="bici"> Bici (CyclOSM)</label>
+    <label class="layer-option"><input type="radio" name="mapLayer" value="outdoors"> Outdoors (topográfico)</label>
+    <label class="layer-option"><input type="radio" name="mapLayer" value="satellite"> Satélite</label>
+
+    <div id="uploadSection" style="margin-top:12px; border-top:1px solid var(--panel-border); padding-top:12px;">
       <div class="step-label"><span>Importar ruta (GPX)</span></div>
       <input type="file" id="gpxFile" accept=".gpx" />
     </div>
@@ -301,6 +296,7 @@
   const savedRoutesList = el('savedRoutesList');
   const resultsCountLabel = el('resultsCountLabel');
   const rbExport = el('rbExport');
+  const searchProgress = el('searchProgress');
   const catShelter = el('catShelter');
   const catWater = el('catWater');
   const catShop = el('catShop');
@@ -308,11 +304,7 @@
   const exportWaypoints = el('exportWaypoints');
   const toast = el('toast');
   const gpsBtn = el('gpsBtn');
-  const layersBtn = el('layersBtn');
-  const layersCard = el('layersCard');
-  const searchProgress = el('searchProgress');
 
-  layersBtn.addEventListener('click', () => { layersCard.hidden = !layersCard.hidden; });
   document.querySelectorAll('input[name="mapLayer"]').forEach(radio => {
     radio.addEventListener('change', () => { if (radio.checked) setBaseLayer(radio.value); });
   });
@@ -481,14 +473,20 @@
   el('gpxFile').addEventListener('change', (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
+    setStatus('Procesando GPX (' + (file.size / 1024).toFixed(0) + ' KB)…');
+    showToast('Procesando GPX, puede tardar unos segundos con archivos grandes…', 5000);
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const points = parseGPX(reader.result);
-        loadRoute(points);
-      } catch (err) {
-        setStatus('Error al leer el GPX: ' + err.message, true);
-      }
+      // El setTimeout deja que el navegador pinte el aviso de arriba antes de
+      // meterse en el parseo/cálculo pesado (que bloquea el hilo mientras dura).
+      setTimeout(() => {
+        try {
+          const points = parseGPX(reader.result);
+          loadRoute(points);
+        } catch (err) {
+          setStatus('Error al leer el GPX: ' + err.message, true);
+        }
+      }, 30);
     };
     reader.readAsText(file);
   });
@@ -534,7 +532,7 @@
   sliderB.addEventListener('pointerdown', () => { sliderB.style.zIndex = 3; sliderA.style.zIndex = 2; });
   radiusSlider.addEventListener('input', () => {
     radiusLabel.textContent = radiusSlider.value + ' m';
-    computeBufferPreview();
+    scheduleBufferPreview();
   });
 
   function updateTrackFill() {
@@ -544,6 +542,12 @@
     const pctB = ((idxB - min) / span) * 100;
     abTrackFill.style.left = pctA + '%';
     abTrackFill.style.width = (pctB - pctA) + '%';
+  }
+
+  let bufferDebounceTimer = null;
+  function scheduleBufferPreview(delay) {
+    clearTimeout(bufferDebounceTimer);
+    bufferDebounceTimer = setTimeout(computeBufferPreview, delay || 150);
   }
 
   function updateSelection() {
@@ -559,7 +563,7 @@
     highlightLine = L.polyline(sub, { color: '#d98a4f', weight: 5, opacity: 0.95 }).addTo(map);
 
     refreshSearchAvailability();
-    computeBufferPreview();
+    scheduleBufferPreview();
   }
 
   function updateResultsUI(counts) {
@@ -576,6 +580,22 @@
   }
 
   // --- Vista previa del corredor de búsqueda (polígono-serpiente) ---
+  // Reduce el nº de vértices que se le pasan a turf.buffer. El cálculo del
+  // corredor escala muy mal con miles de vértices (ahí es donde se colgaba
+  // con GPX grandes); para un buffer de unos pocos cientos de metros de radio
+  // no hace falta la resolución completa del track, con un punto cada
+  // ~40 m sobra. Esto NO toca `sub` (resolución completa, usada para el km
+  // y para exportar), solo la línea que se buffea.
+  const MAX_BUFFER_VERTICES = 600;
+  function decimateForBuffer(points) {
+    if (points.length <= MAX_BUFFER_VERTICES) return points;
+    const step = Math.ceil(points.length / MAX_BUFFER_VERTICES);
+    const out = [];
+    for (let i = 0; i < points.length; i += step) out.push(points[i]);
+    if (out[out.length - 1] !== points[points.length - 1]) out.push(points[points.length - 1]);
+    return out;
+  }
+
   function computeBufferPreview() {
     if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
     if (idxA === null || idxB === null || !trackPoints.length) { currentBuffer = null; return; }
@@ -584,7 +604,8 @@
     const sub = trackPoints.slice(lo, hi + 1);
     if (sub.length < 2) { currentBuffer = null; return; }
 
-    const line = turf.lineString(sub.map(p => [p.lon, p.lat]));
+    const bufferInput = decimateForBuffer(sub);
+    const line = turf.lineString(bufferInput.map(p => [p.lon, p.lat]));
     const radiusM = parseInt(radiusSlider.value, 10);
     let buffered = turf.buffer(line, radiusM / 1000, { units: 'kilometers', steps: 6 });
     buffered = turf.simplify(buffered, { tolerance: 0.0004, highQuality: false });
