@@ -30,8 +30,9 @@
     cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.35); z-index: 1000; padding: 0;
   }
   .fab.active { background: var(--accent-dim); border-color: var(--accent); }
-  #gpsBtn { position: fixed; top: 16px; left: 16px; }
   #settingsBtn { position: fixed; top: 16px; right: 16px; }
+  #gpsBtn { position: fixed; top: 16px; right: 72px; }
+  #layersBtn { position: fixed; top: 72px; right: 16px; }
 
   /* --- Tarjeta flotante de ajustes: solo importar / guardar / gestionar --- */
   .floating-card {
@@ -94,6 +95,27 @@
   }
   .cat-chip input { accent-color: var(--accent); margin: 0; }
 
+  /* --- Selector de capas de mapa --- */
+  #layersCard { top: 128px; }
+  .layer-option {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);
+    padding: 8px 4px; cursor: pointer; border-radius: 8px;
+  }
+  .layer-option input { accent-color: var(--accent); margin: 0; }
+
+  /* --- Barra de progreso indeterminada mientras se busca --- */
+  .progress-bar { height: 4px; background: var(--panel-border); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .progress-bar[hidden] { display: none; }
+  .progress-bar-fill {
+    width: 40%; height: 100%; background: var(--accent); border-radius: 2px;
+    animation: indeterminate 1.1s infinite ease-in-out;
+  }
+  @keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
+  .rb-results.err { color: var(--warn); }
+
   /* --- Marcadores de resultado: círculo de color con una letra --- */
   .poi-marker {
     width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
@@ -147,6 +169,15 @@
 
   <button id="gpsBtn" class="fab" title="Seguir mi posición">◎</button>
   <button id="settingsBtn" class="fab" title="Ajustes">⚙</button>
+  <button id="layersBtn" class="fab" title="Capas del mapa">▦</button>
+
+  <div id="layersCard" class="floating-card" hidden>
+    <div class="card-header">Capa del mapa</div>
+    <label class="layer-option"><input type="radio" name="mapLayer" value="osm" checked> OpenStreetMap</label>
+    <label class="layer-option"><input type="radio" name="mapLayer" value="bici"> Bici (CyclOSM)</label>
+    <label class="layer-option"><input type="radio" name="mapLayer" value="outdoors"> Outdoors (topográfico)</label>
+    <label class="layer-option"><input type="radio" name="mapLayer" value="satellite"> Satélite</label>
+  </div>
 
   <!-- Tarjeta de ajustes: solo importar / guardar / gestionar rutas -->
   <div id="settingsCard" class="floating-card" hidden>
@@ -196,6 +227,7 @@
     </div>
 
     <button id="searchBtn" class="wide" style="margin-top:10px;">Buscar</button>
+    <div id="searchProgress" class="progress-bar" hidden><div class="progress-bar-fill"></div></div>
 
     <div id="resultsCountLabel" class="rb-results" hidden></div>
     <div id="rbExport" class="rb-export" hidden>
@@ -213,10 +245,28 @@
 (function () {
   // Vista inicial: Dinamarca
   const map = L.map('map', { zoomControl: true }).setView([56.2639, 9.5018], 7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
+
+  const baseLayers = {
+    osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap'
+    }),
+    bici: L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+      maxZoom: 20, attribution: '&copy; OpenStreetMap contributors, CyclOSM'
+    }),
+    outdoors: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17, attribution: '&copy; OpenStreetMap contributors, SRTM | &copy; OpenTopoMap (CC-BY-SA)'
+    }),
+    satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19, attribution: 'Tiles &copy; Esri'
+    })
+  };
+  let currentBaseLayer = baseLayers.osm.addTo(map);
+
+  function setBaseLayer(key) {
+    if (!baseLayers[key] || baseLayers[key] === currentBaseLayer) return;
+    map.removeLayer(currentBaseLayer);
+    currentBaseLayer = baseLayers[key].addTo(map);
+  }
 
   let trackPoints = [];
   let routeLine = null;
@@ -258,6 +308,14 @@
   const exportWaypoints = el('exportWaypoints');
   const toast = el('toast');
   const gpsBtn = el('gpsBtn');
+  const layersBtn = el('layersBtn');
+  const layersCard = el('layersCard');
+  const searchProgress = el('searchProgress');
+
+  layersBtn.addEventListener('click', () => { layersCard.hidden = !layersCard.hidden; });
+  document.querySelectorAll('input[name="mapLayer"]').forEach(radio => {
+    radio.addEventListener('change', () => { if (radio.checked) setBaseLayer(radio.value); });
+  });
 
   // --- Utilidades de estado / avisos ---
   function setStatus(msg, isErr) {
@@ -396,9 +454,14 @@
     }
 
     updateSelection();
-    const counts = { shelter: 0, water: 0, shop: 0 };
-    lastResults.forEach(r => { if (counts[r.type] !== undefined) counts[r.type]++; });
-    updateResultsUI(counts);
+    if (lastResults.length) {
+      const counts = { shelter: 0, water: 0, shop: 0 };
+      lastResults.forEach(r => { if (counts[r.type] !== undefined) counts[r.type]++; });
+      updateResultsUI(counts);
+    } else {
+      resultsCountLabel.hidden = true;
+      rbExport.hidden = true;
+    }
 
     // La tarjeta de ajustes pasa a modo "gestionar" (guardar / cargar otro),
     // se cierra sola y deja el mapa + la barra flotante a la vista.
@@ -501,9 +564,10 @@
 
   function updateResultsUI(counts) {
     const n = lastResults.length;
-    resultsCountLabel.hidden = !n;
+    resultsCountLabel.hidden = false;
+    resultsCountLabel.className = 'rb-results';
     rbExport.hidden = !n;
-    if (!n) return;
+    if (!n) { resultsCountLabel.textContent = 'Sin resultados en el corredor.'; return; }
     const parts = [];
     if (counts.shelter) parts.push(counts.shelter + ' refugio' + (counts.shelter === 1 ? '' : 's'));
     if (counts.water) parts.push(counts.water + ' fuente' + (counts.water === 1 ? '' : 's') + ' de agua');
@@ -581,7 +645,11 @@
       return;
     }
     searchBtn.disabled = true;
-    setStatus('Consultando Overpass…');
+    searchBtn.textContent = 'Buscando…';
+    searchProgress.hidden = false;
+    resultsCountLabel.hidden = false;
+    resultsCountLabel.className = 'rb-results';
+    resultsCountLabel.textContent = 'Generando corredor de búsqueda…';
     resultsLayer.clearLayers();
 
     lastSub = currentBuffer.sub;
@@ -596,7 +664,7 @@
     let lastErr = null;
     for (let i = 0; i < mirrors.length; i++) {
       try {
-        setStatus('Consultando Overpass' + (i > 0 ? ' (mirror ' + (i+1) + ')' : '') + '…');
+        resultsCountLabel.textContent = 'Consultando Overpass' + (i > 0 ? ' (mirror ' + (i+1) + ')' : '') + '…';
         const resp = await fetch(mirrors[i], { method: 'POST', body: 'data=' + encodeURIComponent(query) });
         if (!resp.ok) throw new Error('respondió ' + resp.status);
         const data = await resp.json();
@@ -608,9 +676,15 @@
       }
     }
     if (lastErr) {
-      setStatus('Error consultando Overpass tras probar ' + mirrors.length + ' mirrors: ' + lastErr.message, true);
+      resultsCountLabel.hidden = false;
+      resultsCountLabel.className = 'rb-results err';
+      resultsCountLabel.textContent = 'Error consultando Overpass tras probar ' + mirrors.length + ' mirrors: ' + lastErr.message;
+      showToast('Error consultando Overpass: ' + lastErr.message);
     }
+    searchProgress.hidden = true;
+    searchBtn.textContent = 'Buscar';
     searchBtn.disabled = false;
+    refreshSearchAvailability();
   }
 
   function renderResults(elements) {
