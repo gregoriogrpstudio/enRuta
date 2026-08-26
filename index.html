@@ -95,19 +95,20 @@
   .cat-chip input { accent-color: var(--accent); margin: 0; }
 
   /* --- Selector de capas de mapa --- */
-  /* --- Control flotante de capa del mapa (icono + desplegable nativo) --- */
-  .layers-control {
-    position: fixed; top: 72px; right: 16px; z-index: 1000;
-    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 24px;
-    display: flex; align-items: center; gap: 6px; padding: 8px 12px 8px 10px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+  /* --- Icono de capas + menú compacto (como el selector de Google Maps) --- */
+  #layersBtn { position: fixed; top: 72px; right: 16px; }
+  .layers-menu {
+    position: fixed; top: 128px; right: 16px; z-index: 1000; min-width: 170px;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px;
+    padding: 6px; box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   }
-  .layers-control .layers-icon { font-size: 16px; line-height: 1; }
-  .layers-control select {
-    background: transparent; border: none; color: var(--ink); font-size: 13px;
-    font-weight: 600; outline: none; cursor: pointer; -webkit-appearance: none; appearance: none;
+  .layers-menu[hidden] { display: none; }
+  .layers-menu-item {
+    display: block; width: 100%; text-align: left; background: transparent; border: none;
+    color: var(--ink); font-size: 13px; font-weight: 500; padding: 9px 10px; border-radius: 8px;
+    cursor: pointer;
   }
-  .layers-control select option { background: var(--panel); color: var(--ink); }
+  .layers-menu-item.active { color: var(--accent); font-weight: 700; }
 
   /* --- Barra de progreso indeterminada mientras se busca --- */
   .progress-bar { height: 4px; background: var(--panel-border); border-radius: 2px; overflow: hidden; margin-top: 8px; }
@@ -182,15 +183,13 @@
 
   <button id="gpsBtn" class="fab" title="Seguir mi posición">◎</button>
   <button id="settingsBtn" class="fab" title="Ajustes">⚙</button>
+  <button id="layersBtn" class="fab" title="Capa del mapa">▦</button>
 
-  <div class="layers-control">
-    <span class="layers-icon">▦</span>
-    <select id="mapLayerSelect" title="Capa del mapa">
-      <option value="osm">OpenStreetMap</option>
-      <option value="bici">Bici (CyclOSM)</option>
-      <option value="outdoors">Outdoors</option>
-      <option value="satellite">Satélite</option>
-    </select>
+  <div id="layersMenu" class="layers-menu" hidden>
+    <button class="layers-menu-item active" data-layer="osm">OpenStreetMap</button>
+    <button class="layers-menu-item" data-layer="bici">Bici (CyclOSM)</button>
+    <button class="layers-menu-item" data-layer="outdoors">Outdoors</button>
+    <button class="layers-menu-item" data-layer="satellite">Satélite</button>
   </div>
 
   <!-- Tarjeta de ajustes: solo importar / guardar / gestionar rutas -->
@@ -324,8 +323,17 @@
   const toast = el('toast');
   const gpsBtn = el('gpsBtn');
 
-  const mapLayerSelect = el('mapLayerSelect');
-  mapLayerSelect.addEventListener('change', () => setBaseLayer(mapLayerSelect.value));
+  const layersBtn = el('layersBtn');
+  const layersMenu = el('layersMenu');
+  layersBtn.addEventListener('click', () => { layersMenu.hidden = !layersMenu.hidden; });
+  layersMenu.querySelectorAll('.layers-menu-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setBaseLayer(btn.dataset.layer);
+      layersMenu.querySelectorAll('.layers-menu-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      layersMenu.hidden = true;
+    });
+  });
 
   // --- Utilidades de estado / avisos ---
   function setStatus(msg, isErr) {
