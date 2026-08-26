@@ -22,7 +22,7 @@
   #app { position: relative; height: 100%; overflow: hidden; }
   #map { position: absolute; inset: 0; }
 
-  /* --- Botones flotantes circulares (GPS, ajustes, exportar) --- */
+  /* --- Botones flotantes circulares (GPS, ajustes) --- */
   .fab {
     width: 48px; height: 48px; border-radius: 50%;
     background: var(--panel); border: 1px solid var(--panel-border); color: var(--ink);
@@ -33,7 +33,7 @@
   #gpsBtn { position: fixed; top: 16px; left: 16px; }
   #settingsBtn { position: fixed; top: 16px; right: 16px; }
 
-  /* --- Tarjeta flotante de ajustes --- */
+  /* --- Tarjeta flotante de ajustes: solo importar / guardar / gestionar --- */
   .floating-card {
     position: fixed; top: 76px; right: 16px; left: 16px; margin-left: auto;
     max-width: 380px; background: var(--panel); border: 1px solid var(--panel-border);
@@ -61,8 +61,51 @@
   .card-status { font-size: 12px; color: var(--ink-dim); margin-top: 10px; line-height: 1.4; min-height: 16px; }
   .card-status.err { color: var(--warn); }
 
+  /* --- Rutas guardadas --- */
+  #savedRoutesSection { margin-top: 14px; border-top: 1px solid var(--panel-border); padding-top: 10px; }
+  .saved-route-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; }
+  .saved-route-info { font-size: 13px; line-height: 1.3; }
+  .saved-route-info .dim { color: var(--ink-dim); font-size: 11px; }
+  .saved-route-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+  /* --- Barra flotante sobre el mapa: tramo, radio y buscar --- */
+  /* Compacta y siempre visible con la ruta cargada, para no tapar el mapa
+     como hacía la tarjeta grande mientras se juega con los sliders. */
+  .route-bar {
+    position: fixed; left: 12px; right: 12px; bottom: 12px;
+    background: rgba(35,48,43,0.95); border: 1px solid var(--panel-border);
+    border-radius: 14px; padding: 12px 14px 14px; z-index: 950;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  }
+  .route-bar[hidden] { display: none; }
+  .rb-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-dim); }
+  .minmax-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .rb-results { font-size: 12px; color: var(--ink-dim); text-align: center; margin-top: 8px; }
+  .rb-results[hidden] { display: none; }
+  .rb-export { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+  .rb-export[hidden] { display: none; }
+
+  /* --- Selección de categorías --- */
+  .cat-row { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .cat-chip {
+    display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-dim);
+    background: var(--bg); border: 1px solid var(--panel-border); padding: 5px 9px;
+    border-radius: 999px; cursor: pointer;
+  }
+  .cat-chip input { accent-color: var(--accent); margin: 0; }
+
+  /* --- Marcadores de resultado: círculo de color con una letra --- */
+  .poi-marker {
+    width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; font-size: 13px; color: #1c2521;
+    border: 2px solid var(--bg); box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .poi-shelter { background: #d98a4f; }
+  .poi-water { background: #4a90d9; }
+  .poi-shop { background: #d9b64f; }
+
   /* --- Slider de rango con dos tiradores --- */
-  .range-slider { position: relative; height: 26px; margin-top: 10px; }
+  .range-slider { position: relative; height: 26px; margin-top: 8px; }
   .range-slider .track {
     position: absolute; top: 50%; left: 0; right: 0; height: 4px;
     background: var(--panel-border); border-radius: 2px; transform: translateY(-50%);
@@ -85,38 +128,7 @@
     pointer-events: auto; width: 18px; height: 18px; border-radius: 50%;
     background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
   }
-  input[type="range"]#radiusSlider { width: 100%; accent-color: var(--accent); }
-  .minmax-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
-
-  /* --- Rutas guardadas --- */
-  #savedRoutesSection { margin-top: 14px; border-top: 1px solid var(--panel-border); padding-top: 10px; }
-  .saved-route-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; }
-  .saved-route-info { font-size: 13px; line-height: 1.3; }
-  .saved-route-info .dim { color: var(--ink-dim); font-size: 11px; }
-  .saved-route-actions { display: flex; gap: 6px; flex-shrink: 0; }
-
-  /* --- Etiqueta flotante con los datos del tramo --- */
-  #infoPill {
-    position: fixed; bottom: 16px; left: 16px; z-index: 900;
-    background: rgba(35,48,43,0.92); color: var(--ink); padding: 8px 12px;
-    border-radius: 10px; font-size: 12px; line-height: 1.4; max-width: 62vw;
-  }
-  #infoPill[hidden] { display: none; }
-
-  /* --- FAB de exportar, expandible --- */
-  #exportFab { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
-  #exportFab[hidden] { display: none; }
-  #exportFab .export-option {
-    position: absolute; right: 0; white-space: nowrap;
-    background: var(--panel); color: var(--ink); border: 1px solid var(--panel-border);
-    border-radius: 999px; padding: 8px 14px; font-size: 13px;
-    opacity: 0; transform: translateY(10px); pointer-events: none;
-    transition: opacity .15s ease, transform .15s ease;
-  }
-  #exportFab .export-option.opt1 { bottom: 60px; }
-  #exportFab .export-option.opt2 { bottom: 112px; }
-  #exportFab.open .export-option { opacity: 1; transform: translateY(0); pointer-events: auto; }
-  #exportToggle { position: relative; z-index: 2; }
+  input[type="range"]#radiusSlider { width: 100%; accent-color: var(--accent); margin-top: 4px; }
 
   /* --- Toast para avisos que deben verse aunque la tarjeta esté cerrada --- */
   #toast {
@@ -136,6 +148,7 @@
   <button id="gpsBtn" class="fab" title="Seguir mi posición">◎</button>
   <button id="settingsBtn" class="fab" title="Ajustes">⚙</button>
 
+  <!-- Tarjeta de ajustes: solo importar / guardar / gestionar rutas -->
   <div id="settingsCard" class="floating-card" hidden>
     <div class="card-header">EnRuta</div>
 
@@ -144,28 +157,12 @@
       <input type="file" id="gpxFile" accept=".gpx" />
     </div>
 
-    <div id="routeSection" hidden>
-      <div class="step-label"><span>Tramo A → B</span><span class="radius-value" id="abKmLabel">—</span></div>
-      <div class="range-slider" id="abRangeWrap">
-        <div class="track"></div>
-        <div class="track-fill" id="abTrackFill"></div>
-        <input type="range" id="sliderA" min="0" max="0" step="1" value="0" />
-        <input type="range" id="sliderB" min="0" max="0" step="1" value="0" />
-      </div>
-      <div class="minmax-row"><span id="aKmLabel">—</span><span id="bKmLabel">—</span></div>
-
-      <div class="step-label" style="margin-top:12px;"><span>Radio de búsqueda</span><span class="radius-value" id="radiusLabel">120 m</span></div>
-      <input type="range" id="radiusSlider" min="50" max="500" step="10" value="120" />
-
-      <div class="pill">Shelters / refugios (fijo en este prototipo)</div>
-
-      <button id="searchBtn" class="wide" style="margin-top:12px;">Buscar refugios</button>
-
-      <div style="display:flex; gap:6px; margin-top:12px;">
+    <div id="manageSection" hidden>
+      <div class="step-label"><span>Ruta actual</span></div>
+      <div style="display:flex; gap:6px;">
         <input type="text" id="saveNameInput" placeholder="Nombre de la ruta" />
         <button id="saveRouteBtn" class="secondary btn-sm">Guardar</button>
       </div>
-
       <button id="newRouteBtn" class="secondary wide" style="margin-top:8px;">Cargar otro GPX</button>
     </div>
 
@@ -177,12 +174,34 @@
     </div>
   </div>
 
-  <div id="infoPill" hidden></div>
+  <!-- Barra flotante sobre el mapa: aparece con la ruta cargada -->
+  <div id="routeBar" class="route-bar" hidden>
+    <div class="rb-row"><span>Tramo A → B</span><span class="radius-value" id="abKmLabel">—</span></div>
+    <div class="range-slider" id="abRangeWrap">
+      <div class="track"></div>
+      <div class="track-fill" id="abTrackFill"></div>
+      <input type="range" id="sliderA" min="0" max="0" step="1" value="0" />
+      <input type="range" id="sliderB" min="0" max="0" step="1" value="0" />
+    </div>
+    <div class="minmax-row"><span id="aKmLabel">—</span><span id="bKmLabel">—</span></div>
 
-  <div id="exportFab" hidden>
-    <button id="exportBoth" class="export-option opt2">Ruta + waypoints</button>
-    <button id="exportWaypoints" class="export-option opt1">Solo waypoints</button>
-    <button id="exportToggle" class="fab" title="Exportar">⇩</button>
+    <div class="rb-row" style="margin-top:10px;"><span>Radio de búsqueda</span><span class="radius-value" id="radiusLabel">120 m</span></div>
+    <input type="range" id="radiusSlider" min="50" max="500" step="10" value="120" />
+
+    <div class="rb-row" style="margin-top:10px;"><span>Categorías</span></div>
+    <div class="cat-row">
+      <label class="cat-chip"><input type="checkbox" id="catShelter" checked> Refugios</label>
+      <label class="cat-chip"><input type="checkbox" id="catWater" checked> Agua</label>
+      <label class="cat-chip"><input type="checkbox" id="catShop" checked> Tiendas</label>
+    </div>
+
+    <button id="searchBtn" class="wide" style="margin-top:10px;">Buscar</button>
+
+    <div id="resultsCountLabel" class="rb-results" hidden></div>
+    <div id="rbExport" class="rb-export" hidden>
+      <button id="exportWaypoints" class="secondary btn-sm">Solo waypoints</button>
+      <button id="exportBoth" class="secondary btn-sm">Ruta + waypoints</button>
+    </div>
   </div>
 
   <div id="toast" hidden></div>
@@ -214,8 +233,9 @@
   const settingsBtn = el('settingsBtn');
   const settingsCard = el('settingsCard');
   const uploadSection = el('uploadSection');
-  const routeSection = el('routeSection');
+  const manageSection = el('manageSection');
   const cardStatus = el('cardStatus');
+  const routeBar = el('routeBar');
   const searchBtn = el('searchBtn');
   const radiusSlider = el('radiusSlider');
   const radiusLabel = el('radiusLabel');
@@ -229,9 +249,11 @@
   const saveNameInput = el('saveNameInput');
   const saveRouteBtn = el('saveRouteBtn');
   const savedRoutesList = el('savedRoutesList');
-  const infoPill = el('infoPill');
-  const exportFab = el('exportFab');
-  const exportToggle = el('exportToggle');
+  const resultsCountLabel = el('resultsCountLabel');
+  const rbExport = el('rbExport');
+  const catShelter = el('catShelter');
+  const catWater = el('catWater');
+  const catShop = el('catShop');
   const exportBoth = el('exportBoth');
   const exportWaypoints = el('exportWaypoints');
   const toast = el('toast');
@@ -251,6 +273,36 @@
     toastTimer = setTimeout(() => { toast.hidden = true; }, ms || 3500);
   }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // --- Categorías de búsqueda: refugio (R), agua potable (A), tienda (T) ---
+  const CAT_META = {
+    shelter: { letter: 'R', label: 'Refugio' },
+    water:   { letter: 'A', label: 'Agua' },
+    shop:    { letter: 'T', label: 'Tienda' }
+  };
+  function anyCategorySelected() {
+    return catShelter.checked || catWater.checked || catShop.checked;
+  }
+  function refreshSearchAvailability() {
+    if (idxA === null || idxB === null) return;
+    searchBtn.disabled = (idxA === idxB) || !anyCategorySelected();
+  }
+  [catShelter, catWater, catShop].forEach(cb => cb.addEventListener('change', refreshSearchAvailability));
+
+  function classifyTags(tags) {
+    if (tags.amenity === 'shelter' || tags.tourism === 'wilderness_hut' || tags.tourism === 'alpine_hut') return 'shelter';
+    if (tags.amenity === 'drinking_water' || tags.man_made === 'water_tap' || tags.amenity === 'water_point') return 'water';
+    if (tags.shop === 'supermarket' || tags.shop === 'convenience') return 'shop';
+    return null;
+  }
+  function makeDivIcon(type) {
+    return L.divIcon({
+      className: '',
+      html: '<div class="poi-marker poi-' + type + '">' + CAT_META[type].letter + '</div>',
+      iconSize: [26, 26],
+      iconAnchor: [13, 13]
+    });
+  }
 
   settingsBtn.addEventListener('click', () => {
     settingsCard.hidden = !settingsCard.hidden;
@@ -317,7 +369,7 @@
     trackPoints = points;
     const latlngs = points.map(p => [p.lat, p.lon]);
     routeLine = L.polyline(latlngs, { color: '#5fb488', weight: 4, opacity: 0.85 }).addTo(map);
-    map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+    map.fitBounds(routeLine.getBounds(), { padding: [20, 90] });
 
     idxA = restoreState ? clamp(restoreState.idxA, 0, points.length - 1) : 0;
     idxB = restoreState ? clamp(restoreState.idxB, 0, points.length - 1) : points.length - 1;
@@ -331,14 +383,11 @@
     sliderA.min = 0; sliderA.max = points.length - 1; sliderA.value = idxA;
     sliderB.min = 0; sliderB.max = points.length - 1; sliderB.value = idxB;
 
-    uploadSection.hidden = true;
-    routeSection.hidden = false;
-
     if (restoreState && restoreState.results && restoreState.results.length) {
       restoreState.results.forEach(r => {
-        const marker = L.circleMarker([r.lat, r.lon], {
-          radius: 7, color: '#d98a4f', weight: 2, fillColor: '#d98a4f', fillOpacity: 0.7
-        }).bindPopup('<b>' + r.name + '</b><br>' + r.tipo);
+        const type = r.type || 'shelter';
+        const marker = L.marker([r.lat, r.lon], { icon: makeDivIcon(type) })
+          .bindPopup('<b>' + r.name + '</b><br>' + (CAT_META[type] ? CAT_META[type].label : ''));
         resultsLayer.addLayer(marker);
         lastResults.push(r);
       });
@@ -347,7 +396,16 @@
     }
 
     updateSelection();
-    exportFab.hidden = !lastResults.length;
+    const counts = { shelter: 0, water: 0, shop: 0 };
+    lastResults.forEach(r => { if (counts[r.type] !== undefined) counts[r.type]++; });
+    updateResultsUI(counts);
+
+    // La tarjeta de ajustes pasa a modo "gestionar" (guardar / cargar otro),
+    // se cierra sola y deja el mapa + la barra flotante a la vista.
+    uploadSection.hidden = true;
+    manageSection.hidden = false;
+    routeBar.hidden = false;
+    settingsCard.hidden = true;
 
     const meta = points._meta;
     let msg = 'Ruta cargada: ' + points.length + ' puntos, ' + points[points.length-1].dist.toFixed(1) + ' km.';
@@ -383,9 +441,8 @@
     lastResults = []; lastSub = []; currentBuffer = null;
     el('gpxFile').value = '';
     uploadSection.hidden = false;
-    routeSection.hidden = true;
-    infoPill.hidden = true;
-    exportFab.hidden = true;
+    manageSection.hidden = true;
+    routeBar.hidden = true;
     setStatus('');
   });
 
@@ -415,14 +472,15 @@
   radiusSlider.addEventListener('input', () => {
     radiusLabel.textContent = radiusSlider.value + ' m';
     computeBufferPreview();
-    updateInfoPill();
   });
 
   function updateTrackFill() {
     const min = parseInt(sliderA.min, 10), max = parseInt(sliderA.max, 10) || 1;
     const span = (max - min) || 1;
-    abTrackFill.style.left = (((idxA - min) / span) * 100) + '%';
-    abTrackFill.style.width = ((((idxB - min) / span) * 100) - (((idxA - min) / span) * 100)) + '%';
+    const pctA = ((idxA - min) / span) * 100;
+    const pctB = ((idxB - min) / span) * 100;
+    abTrackFill.style.left = pctA + '%';
+    abTrackFill.style.width = (pctB - pctA) + '%';
   }
 
   function updateSelection() {
@@ -437,19 +495,20 @@
     const sub = trackPoints.slice(lo, hi + 1).map(p => [p.lat, p.lon]);
     highlightLine = L.polyline(sub, { color: '#d98a4f', weight: 5, opacity: 0.95 }).addTo(map);
 
-    searchBtn.disabled = (lo === hi);
+    refreshSearchAvailability();
     computeBufferPreview();
-    updateInfoPill();
   }
 
-  function updateInfoPill() {
-    if (!trackPoints.length) { infoPill.hidden = true; return; }
-    infoPill.hidden = false;
-    const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
-    const km = (trackPoints[hi].dist - trackPoints[lo].dist).toFixed(1);
-    let txt = 'Tramo: ' + km + ' km · Radio: ' + radiusSlider.value + ' m';
-    if (lastResults.length) txt += ' · ' + lastResults.length + ' refugios';
-    infoPill.textContent = txt;
+  function updateResultsUI(counts) {
+    const n = lastResults.length;
+    resultsCountLabel.hidden = !n;
+    rbExport.hidden = !n;
+    if (!n) return;
+    const parts = [];
+    if (counts.shelter) parts.push(counts.shelter + ' refugio' + (counts.shelter === 1 ? '' : 's'));
+    if (counts.water) parts.push(counts.water + ' fuente' + (counts.water === 1 ? '' : 's') + ' de agua');
+    if (counts.shop) parts.push(counts.shop + ' tienda' + (counts.shop === 1 ? '' : 's'));
+    resultsCountLabel.textContent = parts.join(' · ');
   }
 
   // --- Vista previa del corredor de búsqueda (polígono-serpiente) ---
@@ -489,8 +548,33 @@
     return ring.map(c => c[1].toFixed(6) + ' ' + c[0].toFixed(6)).join(' ');
   }
 
+  function buildOverpassQuery(polyStr) {
+    const clauses = [];
+    if (catShelter.checked) {
+      clauses.push(`node["amenity"="shelter"](poly:"${polyStr}");`);
+      clauses.push(`way["amenity"="shelter"](poly:"${polyStr}");`);
+      clauses.push(`node["tourism"="wilderness_hut"](poly:"${polyStr}");`);
+      clauses.push(`node["tourism"="alpine_hut"](poly:"${polyStr}");`);
+    }
+    if (catWater.checked) {
+      clauses.push(`node["amenity"="drinking_water"](poly:"${polyStr}");`);
+      clauses.push(`node["man_made"="water_tap"](poly:"${polyStr}");`);
+      clauses.push(`node["amenity"="water_point"](poly:"${polyStr}");`);
+    }
+    if (catShop.checked) {
+      clauses.push(`node["shop"="supermarket"](poly:"${polyStr}");`);
+      clauses.push(`way["shop"="supermarket"](poly:"${polyStr}");`);
+      clauses.push(`node["shop"="convenience"](poly:"${polyStr}");`);
+    }
+    return `[out:json][timeout:25];(${clauses.join('\n')});out center;`;
+  }
+
   async function searchShelters() {
     if (idxA === null || idxB === null) return;
+    if (!anyCategorySelected()) {
+      setStatus('Selecciona al menos una categoría.', true);
+      return;
+    }
     computeBufferPreview();
     if (!currentBuffer) {
       setStatus('El tramo seleccionado es demasiado corto.', true);
@@ -502,12 +586,7 @@
 
     lastSub = currentBuffer.sub;
     const polyStr = polyToOverpassString(currentBuffer.buffered);
-    const query = `[out:json][timeout:25];(
-      node["amenity"="shelter"](poly:"${polyStr}");
-      way["amenity"="shelter"](poly:"${polyStr}");
-      node["tourism"="wilderness_hut"](poly:"${polyStr}");
-      node["tourism"="alpine_hut"](poly:"${polyStr}");
-    );out center;`;
+    const query = buildOverpassQuery(polyStr);
 
     const mirrors = [
       'https://overpass-api.de/api/interpreter',
@@ -536,22 +615,23 @@
 
   function renderResults(elements) {
     lastResults = [];
+    const counts = { shelter: 0, water: 0, shop: 0 };
     elements.forEach(el2 => {
       const lat = el2.lat !== undefined ? el2.lat : (el2.center ? el2.center.lat : null);
       const lon = el2.lon !== undefined ? el2.lon : (el2.center ? el2.center.lon : null);
       if (lat === null || lon === null) return;
       const tags = el2.tags || {};
-      const name = tags.name || 'Refugio sin nombre';
-      const tipo = tags.tourism || tags.amenity || '';
-      const marker = L.circleMarker([lat, lon], {
-        radius: 7, color: '#d98a4f', weight: 2, fillColor: '#d98a4f', fillOpacity: 0.7
-      }).bindPopup('<b>' + name + '</b><br>' + tipo);
+      const type = classifyTags(tags);
+      if (!type) return;
+      const name = tags.name || (CAT_META[type].label + ' sin nombre');
+      const marker = L.marker([lat, lon], { icon: makeDivIcon(type) })
+        .bindPopup('<b>' + name + '</b><br>' + CAT_META[type].label);
       resultsLayer.addLayer(marker);
-      lastResults.push({ lat, lon, name, tipo });
+      lastResults.push({ lat, lon, name, type });
+      counts[type]++;
     });
-    setStatus(lastResults.length + ' refugio(s) encontrado(s) en el corredor.');
-    exportFab.hidden = !lastResults.length;
-    updateInfoPill();
+    setStatus(lastResults.length + ' resultado(s) encontrado(s) en el corredor.');
+    updateResultsUI(counts);
   }
 
   searchBtn.addEventListener('click', searchShelters);
@@ -568,7 +648,7 @@
     lastResults.forEach(r => {
       parts.push('  <wpt lat="' + r.lat.toFixed(6) + '" lon="' + r.lon.toFixed(6) + '">');
       parts.push('    <name>' + escapeXml(r.name) + '</name>');
-      parts.push('    <type>' + escapeXml(r.tipo) + '</type>');
+      parts.push('    <type>' + escapeXml(CAT_META[r.type] ? CAT_META[r.type].label : '') + '</type>');
       parts.push('  </wpt>');
     });
     if (mode === 'both' && lastSub.length > 1) {
@@ -594,9 +674,8 @@
     URL.revokeObjectURL(url);
   }
 
-  exportToggle.addEventListener('click', () => exportFab.classList.toggle('open'));
-  exportBoth.addEventListener('click', () => { downloadGPX('both'); exportFab.classList.remove('open'); });
-  exportWaypoints.addEventListener('click', () => { downloadGPX('waypoints'); exportFab.classList.remove('open'); });
+  exportBoth.addEventListener('click', () => downloadGPX('both'));
+  exportWaypoints.addEventListener('click', () => downloadGPX('waypoints'));
 
   // --- Guardar / cargar rutas en IndexedDB ---
   const DB_NAME = 'enruta-db';
