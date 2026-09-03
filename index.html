@@ -466,6 +466,32 @@
         '</div>' +
       '</div>';
   }
+
+  // --- Popup al tocar cualquier punto del mapa: Street View / Maps / copiar ---
+  // Mismo principio que Golior: deep links de Google sin API key ni cuenta de
+  // facturación (el enlace "pano" de Street View es un esquema documentado
+  // públicamente por Google, no requiere clave).
+  function buildClickPopupHTML(lat, lon) {
+    const latStr = lat.toFixed(6), lonStr = lon.toFixed(6);
+    const coordsText = latStr + ', ' + lonStr;
+    const gmapsUrl = 'https://www.google.com/maps?q=' + latStr + ',' + lonStr;
+    const streetViewUrl = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + latStr + ',' + lonStr;
+    return '' +
+      '<div class="poi-popup">' +
+        '<span class="poi-coords">' + coordsText + '</span>' +
+        '<div class="poi-popup-actions">' +
+          '<a href="' + streetViewUrl + '" target="_blank" rel="noopener" class="poi-popup-btn">Street View</a>' +
+          '<a href="' + gmapsUrl + '" target="_blank" rel="noopener" class="poi-popup-btn">Maps</a>' +
+          '<button type="button" class="poi-popup-btn" onclick="window.enrutaCopyCoords(\'' + coordsText + '\')">Copiar</button>' +
+        '</div>' +
+      '</div>';
+  }
+  map.on('click', (e) => {
+    L.popup()
+      .setLatLng(e.latlng)
+      .setContent(buildClickPopupHTML(e.latlng.lat, e.latlng.lng))
+      .openOn(map);
+  });
   // El botón del popup usa un onclick inline, así que necesita colgar de
   // window (el contenido del popup se inserta como HTML plano, fuera del
   // cierre normal de este script).
