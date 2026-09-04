@@ -144,6 +144,7 @@
   .poi-shelter { background: #d98a4f; }
   .poi-water { background: #4a90d9; }
   .poi-shop { background: #d9b64f; }
+  .poi-waypoint { background: #a98fd9; }
 
   /* --- Slider de rango con dos tiradores --- */
   .range-slider { position: relative; height: 26px; margin-top: 8px; }
@@ -209,17 +210,22 @@
     <div class="card-header">EnRuta</div>
 
     <div id="uploadSection" style="margin-top:0; border-top:none; padding-top:0;">
-      <div class="step-label"><span>Importar ruta (GPX)</span></div>
-      <input type="file" id="gpxFile" accept=".gpx" />
+      <div class="step-label"><span>Importar ruta (GPX o KML)</span></div>
+      <input type="file" id="gpxFile" accept=".gpx,.kml" />
     </div>
 
     <div id="manageSection" hidden>
       <div class="step-label"><span>Ruta actual</span></div>
+
+      <label class="cat-chip" id="waypointsToggleRow" hidden style="width: fit-content; margin-bottom: 10px;">
+        <input type="checkbox" id="showWaypointsToggle" checked> Ver waypoints (<span id="waypointsCount">0</span>)
+      </label>
+
       <div style="display:flex; gap:6px;">
         <input type="text" id="saveNameInput" placeholder="Nombre de la ruta" />
         <button id="saveRouteBtn" class="secondary btn-sm">Guardar</button>
       </div>
-      <button id="newRouteBtn" class="secondary wide" style="margin-top:8px;">Cargar otro GPX</button>
+      <button id="newRouteBtn" class="secondary wide" style="margin-top:8px;">Cargar otro archivo</button>
     </div>
 
     <div id="cardStatus" class="card-status"></div>
@@ -354,6 +360,8 @@
   let bufferLayer = null;
   let currentBuffer = null;
   let resultsLayer = L.layerGroup().addTo(map);
+  let waypointsLayer = L.layerGroup().addTo(map);
+  let routeWaypoints = [];
   let lastResults = [];
   let lastSub = [];
 
@@ -374,6 +382,9 @@
   const aKmLabel = el('aKmLabel');
   const bKmLabel = el('bKmLabel');
   const newRouteBtn = el('newRouteBtn');
+  const waypointsToggleRow = el('waypointsToggleRow');
+  const showWaypointsToggle = el('showWaypointsToggle');
+  const waypointsCountLabel = el('waypointsCount');
   const saveNameInput = el('saveNameInput');
   const saveRouteBtn = el('saveRouteBtn');
   const savedRoutesList = el('savedRoutesList');
@@ -446,6 +457,19 @@
       iconAnchor: [13, 13]
     });
   }
+  function makeWaypointIcon() {
+    return L.divIcon({ className: '', html: '<div class="poi-marker poi-waypoint">⚑</div>', iconSize: [26, 26], iconAnchor: [13, 13] });
+  }
+  function renderWaypoints() {
+    waypointsLayer.clearLayers();
+    if (!showWaypointsToggle.checked) return;
+    routeWaypoints.forEach(w => {
+      L.marker([w.lat, w.lon], { icon: makeWaypointIcon() })
+        .bindPopup(buildPopupHTML(w.name || 'Waypoint sin nombre', 'Waypoint de la ruta', w.lat, w.lon))
+        .addTo(waypointsLayer);
+    });
+  }
+  showWaypointsToggle.addEventListener('change', renderWaypoints);
 
   // --- Popup de cada resultado: nombre, categoría, coords, Maps y copiar ---
   function escapeHtmlAttr(s) {
@@ -561,7 +585,76 @@
       chosen[i].dist = dist;
     }
     chosen._meta = { totalSegments: segments.length, usedLengthKm: dist };
-    return chosen;
+
+    const waypoints = Array.from(xml.getElementsByTagName('wpt')).map(w => {
+      const nameEl = w.getElementsByTagName('name')[0];
+      return {
+        lat: parseFloat(w.getAttribute('lat')),
+        lon: parseFloat(w.getAttribute('lon')),
+        name: nameEl ? nameEl.textContent.trim() : ''
+      };
+    }).filter(w => isFinite(w.lat) && isFinite(w.lon));
+
+    return { points: chosen, waypoints };
+  }
+
+  // --- Parseo de KML: traza (LineString o gx:Track) + waypoints (Point) ---
+  function parseKmlCoordText(text) {
+    return text.trim().split(/\s+/).filter(Boolean).map(tuple => {
+      const parts = tuple.split(',').map(Number);
+      return { lat: parts[1], lon: parts[0] };
+    }).filter(p => isFinite(p.lat) && isFinite(p.lon));
+  }
+
+  function parseKML(text) {
+    const xml = new DOMParser().parseFromString(text, 'application/xml');
+    const segments = [];
+
+    Array.from(xml.getElementsByTagName('LineString')).forEach(ls => {
+      const coordEl = ls.getElementsByTagName('coordinates')[0];
+      if (!coordEl) return;
+      const pts = parseKmlCoordText(coordEl.textContent);
+      if (pts.length >= 2) segments.push(pts);
+    });
+
+    // Tracks con la extensión de Google Earth (gx:Track / gx:coord)
+    Array.from(xml.getElementsByTagName('gx:Track')).forEach(track => {
+      const pts = Array.from(track.getElementsByTagName('gx:coord')).map(c => {
+        const parts = c.textContent.trim().split(/\s+/).map(Number);
+        return { lat: parts[1], lon: parts[0] };
+      }).filter(p => isFinite(p.lat) && isFinite(p.lon));
+      if (pts.length >= 2) segments.push(pts);
+    });
+
+    if (segments.length === 0) throw new Error('No se encontró ninguna traza (LineString o gx:Track) en el KML.');
+
+    let chosen = segments[0], chosenLen = segLength(segments[0]);
+    for (let i = 1; i < segments.length; i++) {
+      const len = segLength(segments[i]);
+      if (len > chosenLen) { chosen = segments[i]; chosenLen = len; }
+    }
+    let dist = 0;
+    chosen[0].dist = 0;
+    for (let i = 1; i < chosen.length; i++) {
+      dist += haversine(chosen[i-1].lat, chosen[i-1].lon, chosen[i].lat, chosen[i].lon);
+      chosen[i].dist = dist;
+    }
+    chosen._meta = { totalSegments: segments.length, usedLengthKm: dist };
+
+    const waypoints = [];
+    Array.from(xml.getElementsByTagName('Placemark')).forEach(pm => {
+      const point = pm.getElementsByTagName('Point')[0];
+      if (!point) return;
+      const coordEl = point.getElementsByTagName('coordinates')[0];
+      if (!coordEl) return;
+      const parts = coordEl.textContent.trim().split(',').map(Number);
+      const lon = parts[0], lat = parts[1];
+      if (!isFinite(lat) || !isFinite(lon)) return;
+      const nameEl = pm.getElementsByTagName('name')[0];
+      waypoints.push({ lat, lon, name: nameEl ? nameEl.textContent.trim() : '' });
+    });
+
+    return { points: chosen, waypoints };
   }
 
   // --- Cargar una ruta en el mapa (GPX nuevo o restaurada desde IndexedDB) ---
@@ -573,6 +666,11 @@
     if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
     resultsLayer.clearLayers();
     lastResults = []; lastSub = []; currentBuffer = null;
+    routeWaypoints = (restoreState && restoreState.waypoints) ? restoreState.waypoints : [];
+    showWaypointsToggle.checked = true;
+    waypointsToggleRow.hidden = !routeWaypoints.length;
+    waypointsCountLabel.textContent = routeWaypoints.length;
+    renderWaypoints();
 
     trackPoints = points;
     displayPoints = resamplePoints(points, DISPLAY_STEP_M);
@@ -632,18 +730,19 @@
   el('gpxFile').addEventListener('change', (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
-    setStatus('Procesando GPX (' + (file.size / 1024).toFixed(0) + ' KB)…');
-    showToast('Procesando GPX, puede tardar unos segundos con archivos grandes…', 5000);
+    const isKML = /\.kml$/i.test(file.name);
+    setStatus('Procesando ' + (isKML ? 'KML' : 'GPX') + ' (' + (file.size / 1024).toFixed(0) + ' KB)…');
+    showToast('Procesando archivo, puede tardar unos segundos con archivos grandes…', 5000);
     const reader = new FileReader();
     reader.onload = () => {
       // El setTimeout deja que el navegador pinte el aviso de arriba antes de
       // meterse en el parseo/cálculo pesado (que bloquea el hilo mientras dura).
       setTimeout(() => {
         try {
-          const points = parseGPX(reader.result);
-          loadRoute(points);
+          const result = isKML ? parseKML(reader.result) : parseGPX(reader.result);
+          loadRoute(result.points, { waypoints: result.waypoints });
         } catch (err) {
-          setStatus('Error al leer el GPX: ' + err.message, true);
+          setStatus('Error al leer el archivo: ' + err.message, true);
         }
       }, 30);
     };
@@ -658,6 +757,9 @@
     if (highlightLine) { map.removeLayer(highlightLine); highlightLine = null; }
     if (bufferLayer) { map.removeLayer(bufferLayer); bufferLayer = null; }
     resultsLayer.clearLayers();
+    waypointsLayer.clearLayers();
+    routeWaypoints = [];
+    waypointsToggleRow.hidden = true;
     lastResults = []; lastSub = []; currentBuffer = null;
     el('gpxFile').value = '';
     uploadSection.hidden = false;
@@ -1059,7 +1161,7 @@
     try {
       const r = await dbGetRoute(id);
       if (!r) { setStatus('No se ha encontrado esa ruta guardada.', true); return; }
-      loadRoute(r.trackPoints, { idxA: r.idxA, idxB: r.idxB, radius: r.radius, results: r.results });
+      loadRoute(r.trackPoints, { idxA: r.idxA, idxB: r.idxB, radius: r.radius, results: r.results, waypoints: r.waypoints });
       setStatus('Ruta "' + r.name + '" cargada.');
     } catch (err) {
       setStatus('Error al cargar la ruta guardada: ' + err.message, true);
@@ -1075,7 +1177,8 @@
       trackPoints,
       idxA, idxB,
       radius: parseInt(radiusSlider.value, 10),
-      results: lastResults
+      results: lastResults,
+      waypoints: routeWaypoints
     };
     try {
       await dbSaveRoute(record);
