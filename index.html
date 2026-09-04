@@ -83,7 +83,7 @@
   }
   .route-bar[hidden] { display: none; }
   .rb-handle {
-    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; cursor: pointer; touch-action: none;
     margin: -12px -14px 10px; padding: 10px 14px 6px;
   }
   .rb-handle-bar {
@@ -410,7 +410,25 @@
   const routeBar = el('routeBar');
   const routeBarHandle = el('routeBarHandle');
   const rbSummary = el('rbSummary');
-  routeBarHandle.addEventListener('click', () => { routeBar.classList.toggle('collapsed'); });
+  // Toque simple: alterna. Arrastre: hacia arriba despliega, hacia abajo pliega.
+  let handleDragStartY = null;
+  routeBarHandle.addEventListener('pointerdown', (e) => {
+    handleDragStartY = e.clientY;
+  });
+  routeBarHandle.addEventListener('pointerup', (e) => {
+    if (handleDragStartY === null) return;
+    const deltaY = e.clientY - handleDragStartY;
+    handleDragStartY = null;
+    const DRAG_THRESHOLD = 8;
+    if (Math.abs(deltaY) < DRAG_THRESHOLD) {
+      routeBar.classList.toggle('collapsed');
+    } else if (deltaY < 0) {
+      routeBar.classList.remove('collapsed');
+    } else {
+      routeBar.classList.add('collapsed');
+    }
+  });
+  routeBarHandle.addEventListener('pointercancel', () => { handleDragStartY = null; });
   const searchBtn = el('searchBtn');
   const radiusSlider = el('radiusSlider');
   const radiusLabel = el('radiusLabel');
