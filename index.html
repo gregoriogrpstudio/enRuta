@@ -969,8 +969,12 @@
   function buildOverpassQuery(polyStr) {
     const clauses = [];
     if (catShelter.checked) {
-      clauses.push(`node["amenity"="shelter"](poly:"${polyStr}");`);
-      clauses.push(`way["amenity"="shelter"](poly:"${polyStr}");`);
+      // amenity=shelter cubre tanto refugios de montaña como marquesinas de
+      // parada de guagua (shelter_type=public_transport, o con la etiqueta
+      // public_transport puesta directamente) — se excluyen esas.
+      const shelterFilter = '["amenity"="shelter"]["shelter_type"!="public_transport"]["public_transport"!~"."]';
+      clauses.push(`node${shelterFilter}(poly:"${polyStr}");`);
+      clauses.push(`way${shelterFilter}(poly:"${polyStr}");`);
       clauses.push(`node["tourism"="wilderness_hut"](poly:"${polyStr}");`);
       clauses.push(`node["tourism"="alpine_hut"](poly:"${polyStr}");`);
     }
