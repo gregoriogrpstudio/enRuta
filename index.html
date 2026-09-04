@@ -678,8 +678,8 @@
     routeLine = L.polyline(latlngs, { color: '#5fb488', weight: 4, opacity: 0.85 }).addTo(map);
     map.fitBounds(routeLine.getBounds(), { padding: [20, 90] });
 
-    idxA = restoreState ? clamp(restoreState.idxA, 0, points.length - 1) : 0;
-    idxB = restoreState ? clamp(restoreState.idxB, 0, points.length - 1) : points.length - 1;
+    idxA = (restoreState && restoreState.idxA !== undefined) ? clamp(restoreState.idxA, 0, points.length - 1) : 0;
+    idxB = (restoreState && restoreState.idxB !== undefined) ? clamp(restoreState.idxB, 0, points.length - 1) : points.length - 1;
     const radiusVal = (restoreState && restoreState.radius) ? restoreState.radius : 120;
     radiusSlider.value = radiusVal;
     radiusLabel.textContent = radiusVal + ' m';
