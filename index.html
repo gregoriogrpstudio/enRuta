@@ -82,6 +82,18 @@
     box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   }
   .route-bar[hidden] { display: none; }
+  .rb-handle {
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    margin: -12px -14px 10px; padding: 10px 14px 6px;
+  }
+  .rb-handle-bar {
+    width: 36px; height: 4px; border-radius: 2px; background: var(--panel-border); flex-shrink: 0;
+  }
+  .rb-summary { flex: 1; font-size: 12px; color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rb-chevron { color: var(--ink-dim); font-size: 12px; transition: transform 0.2s ease; flex-shrink: 0; }
+  .route-bar.collapsed .rb-chevron { transform: rotate(180deg); }
+  .rb-body { overflow: hidden; max-height: 600px; transition: max-height 0.2s ease, opacity 0.15s ease; opacity: 1; }
+  .route-bar.collapsed .rb-body { max-height: 0; opacity: 0; }
   .rb-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-dim); }
   .minmax-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
   .rb-results { font-size: 12px; color: var(--ink-dim); text-align: center; margin-top: 8px; }
@@ -170,7 +182,15 @@
     pointer-events: auto; width: 18px; height: 18px; border-radius: 50%;
     background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
   }
-  input[type="range"]#radiusSlider { width: 100%; accent-color: var(--accent); margin-top: 4px; }
+  input[type="range"]#radiusSlider { width: 100%; accent-color: var(--accent); margin-top: 4px; display: block; }
+  .radius-slider-wrap { position: relative; padding-bottom: 14px; }
+  .radius-ticks { position: absolute; top: 12px; left: 0; right: 0; height: 0; pointer-events: none; }
+  .radius-tick {
+    position: absolute; top: 0; width: 2px; height: 7px; background: var(--ink-dim);
+    transform: translateX(-50%); border-radius: 1px;
+  }
+  .radius-tick-labels { position: absolute; top: 20px; left: 0; right: 0; height: 12px; pointer-events: none; }
+  .radius-tick-labels span { position: absolute; transform: translateX(-50%); font-size: 10px; color: var(--ink-dim); }
 
   /* --- Toast para avisos que deben verse aunque la tarjeta esté cerrada --- */
   #toast {
@@ -238,6 +258,13 @@
 
   <!-- Barra flotante sobre el mapa: aparece con la ruta cargada -->
   <div id="routeBar" class="route-bar" hidden>
+    <div id="routeBarHandle" class="rb-handle">
+      <span class="rb-handle-bar"></span>
+      <span id="rbSummary" class="rb-summary"></span>
+      <span id="rbChevron" class="rb-chevron">▾</span>
+    </div>
+
+    <div id="rbBody" class="rb-body">
     <div class="rb-row"><span>Tramo A → B</span><span class="radius-value" id="abKmLabel">—</span></div>
     <div class="range-slider" id="abRangeWrap">
       <div class="track"></div>
@@ -248,12 +275,20 @@
     <div class="minmax-row"><span id="aKmLabel">—</span><span id="bKmLabel">—</span></div>
 
     <div class="rb-row" style="margin-top:10px;"><span>Radio de búsqueda</span><span class="radius-value" id="radiusLabel">120 m</span></div>
-    <input type="range" id="radiusSlider" min="50" max="1000" step="10" value="120" list="radiusTicks" />
-    <datalist id="radiusTicks">
-      <option value="250"></option>
-      <option value="500"></option>
-    </datalist>
-    <div class="minmax-row"><span>50 m</span><span>marcas en 250 m y 500 m</span><span>1 km</span></div>
+    <div class="radius-slider-wrap">
+      <input type="range" id="radiusSlider" min="50" max="1000" step="10" value="120" />
+      <div class="radius-ticks">
+        <span class="radius-tick" style="left:21.05%"></span>
+        <span class="radius-tick" style="left:47.37%"></span>
+        <span class="radius-tick" style="left:73.68%"></span>
+      </div>
+      <div class="radius-tick-labels">
+        <span style="left:21.05%">250</span>
+        <span style="left:47.37%">500</span>
+        <span style="left:73.68%">750</span>
+      </div>
+    </div>
+    <div class="minmax-row" style="margin-top:12px;"><span>50 m</span><span>1 km</span></div>
 
     <div class="rb-row" style="margin-top:10px;"><span>Categorías</span></div>
     <div class="cat-row">
@@ -275,6 +310,7 @@
     <div id="searchProgress" class="progress-bar" hidden><div class="progress-bar-fill"></div></div>
 
     <div id="resultsCountLabel" class="rb-results" hidden></div>
+    </div>
   </div>
 
   <div id="toast" hidden></div>
@@ -372,6 +408,9 @@
   const manageSection = el('manageSection');
   const cardStatus = el('cardStatus');
   const routeBar = el('routeBar');
+  const routeBarHandle = el('routeBarHandle');
+  const rbSummary = el('rbSummary');
+  routeBarHandle.addEventListener('click', () => { routeBar.classList.toggle('collapsed'); });
   const searchBtn = el('searchBtn');
   const radiusSlider = el('radiusSlider');
   const radiusLabel = el('radiusLabel');
@@ -717,6 +756,7 @@
     uploadSection.hidden = true;
     manageSection.hidden = false;
     routeBar.hidden = false;
+    routeBar.classList.remove('collapsed');
     settingsCard.hidden = true;
 
     const meta = points._meta;
@@ -794,6 +834,7 @@
   radiusSlider.addEventListener('input', () => {
     radiusLabel.textContent = radiusSlider.value + ' m';
     scheduleBufferPreview();
+    updateRbSummary();
   });
 
   function updateTrackFill() {
@@ -811,6 +852,15 @@
     bufferDebounceTimer = setTimeout(computeBufferPreview, delay || 150);
   }
 
+  function updateRbSummary() {
+    if (idxA === null || idxB === null || !trackPoints.length) { rbSummary.textContent = ''; return; }
+    const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
+    const km = (trackPoints[hi].dist - trackPoints[lo].dist).toFixed(1);
+    let txt = km + ' km · ' + radiusSlider.value + ' m';
+    if (lastResults.length) txt += ' · ' + lastResults.length + ' resultados';
+    rbSummary.textContent = txt;
+  }
+
   function updateSelection() {
     const lo = Math.min(idxA, idxB), hi = Math.max(idxA, idxB);
     const km = (trackPoints[hi].dist - trackPoints[lo].dist).toFixed(1);
@@ -825,6 +875,7 @@
 
     refreshSearchAvailability();
     scheduleBufferPreview();
+    updateRbSummary();
   }
 
   function updateResultsUI(counts) {
@@ -833,12 +884,13 @@
     resultsCountLabel.className = 'rb-results';
     downloadBtn.hidden = !n;
     if (!n) downloadMenu.hidden = true;
-    if (!n) { resultsCountLabel.textContent = 'Sin resultados en el corredor.'; return; }
+    if (!n) { resultsCountLabel.textContent = 'Sin resultados en el corredor.'; updateRbSummary(); return; }
     const parts = [];
     if (counts.shelter) parts.push(counts.shelter + ' refugio' + (counts.shelter === 1 ? '' : 's'));
     if (counts.water) parts.push(counts.water + ' fuente' + (counts.water === 1 ? '' : 's') + ' de agua');
     if (counts.shop) parts.push(counts.shop + ' tienda' + (counts.shop === 1 ? '' : 's'));
     resultsCountLabel.textContent = parts.join(' · ');
+    updateRbSummary();
   }
 
   // --- Vista previa del corredor de búsqueda (polígono-serpiente) ---
